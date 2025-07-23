@@ -76,33 +76,33 @@ record AppData where
 %runElab derive "AppData" [Show, Eq]
 
 extractAppData : TTImp -> AppData
-extractAppData t = extract' $ Expr.unAppAny t
+extractAppData t = uncurry extract' $ Expr.unAppAny t
   where
-    extract' : (TTImp, List AnyApp) -> AppData
-    extract' (fn, []) = MkAppData fn [] empty []
-    extract' (fn, ((PosApp s) :: xs)) = {positional $= (ExplArg s ::)} $ extract' (fn, xs)
-    extract' (fn, ((NamedApp nm s) :: xs)) = {named $= insert nm s} $ extract' (fn, xs)
-    extract' (fn, ((AutoApp s) :: xs)) = {positional $= (AutoArg s ::)} $ extract' (fn, xs)
-    extract' (fn, ((WithApp s) :: xs)) = {withs $= (s ::)} $ extract' (fn, xs)
+    regApp : AnyApp -> AppData -> AppData
+    regApp (PosApp s) = {positional $= (ExplArg s ::)}
+    regApp (NamedApp nm s) = {named $= insert nm s}
+    regApp (AutoApp s) = {positional $= (AutoArg s ::)}
+    regApp (WithApp s) = {withs $= (s ::)}
+
+    extract' : TTImp -> List AnyApp -> AppData
+    extract' fn = foldl .| flip regApp .| MkAppData fn [] empty []
+
 
 isPositional' : AnyApp -> Bool
-isPositional' (PosApp s) = True
-isPositional' (NamedApp nm s) = False
-isPositional' (AutoApp s) = True
-isPositional' (WithApp s) = False
+isPositional' (PosApp _) = True
+isPositional' (NamedApp _ _) = False
+isPositional' (AutoApp _) = True
+isPositional' (WithApp _) = False
 
 isPositional : Arg -> Bool
-isPositional (MkArg count ImplicitArg name type) = False
-isPositional (MkArg count ExplicitArg name type) = True
-isPositional (MkArg count AutoImplicit name type) = True
-isPositional (MkArg count (DefImplicit x) name type) = False
+isPositional (MkArg _ ImplicitArg _ _) = False
+isPositional (MkArg _ ExplicitArg _ _) = True
+isPositional (MkArg _ AutoImplicit _ _) = True
+isPositional (MkArg _ (DefImplicit _) _ _) = False
 
+||| Delete from y all entries keyed to x's elements
 excise : Ord t => SortedSet t -> SortedMap t k -> SortedMap t k
-excise x = doit $ Prelude.toList x
-  where
-    doit : List t -> SortedMap t k -> SortedMap t k
-    doit [] x = x
-    doit (x :: xs) m = delete x $ doit xs m
+excise = flip $ foldl delete'
 
 freeVarsApp : AppData -> Types.TypeInfo -> SortedMap Name TTImp
 freeVarsApp ad tinfo = do
@@ -111,11 +111,11 @@ freeVarsApp ad tinfo = do
   let tuplistNamed = filter (\(x, n) => not $ isPositional x) tinfo_tuplist
   let tlNames : SortedMap Name TTImp = fromList $ map (\(a,n)=>(n, a.type)) $ tuplistNamed
   let unfreeNames : SortedSet Name = fromList $ keys ad.named
-  let freePositional = fromList $ map (\(a,n)=>(n, a.type)) $ drop (length ad.positional) tuplistPos
+  let freePositional = fromList $ map (\(a,n)=>(n, a.type)) $ drop ad.positional.length tuplistPos
   excise unfreeNames $ mergeLeft freePositional tlNames
 
 freeVars'' : TTImp -> AppData -> Types.TypeInfo -> SortedMap Name TTImp
-freeVars'' t ad ti = mergeLeft (freeVarsLambda t) $ freeVarsApp ad ti
+freeVars'' t ad ti = mergeLeft .| freeVarsLambda t .| freeVarsApp ad ti
 
 traverseTupList : List (Arg, Name) -> (SortedMap Name TTImp, List TTImp)
 traverseTupList [] = (empty, [])
@@ -142,33 +142,31 @@ fINamed t [] = t
 fINamed t ((n, a) :: xs) = INamedApp emptyFC (fINamed t xs) n a
 
 traverseTupList' : List (Arg, Name) -> (SortedMap Name TTImp, List Name)
-traverseTupList' [] = (empty, [])
-traverseTupList' (((MkArg _ pinfo _ _), nm) :: xs) with (pinfo, traverseTupList' xs)
-  traverseTupList' (((MkArg _ _ _ _), nm) :: xs) | (ImplicitArg, named, positionals) =
-    (insert nm (IVar emptyFC nm) named, positionals)
-  traverseTupList' (((MkArg _ _ _ _), nm) :: xs) | (ExplicitArg, named, positionals) =
-    (named, nm :: positionals)
-  traverseTupList' (((MkArg _ _ _ _), nm) :: xs) | (AutoImplicit, named, positionals) =
-    (insert nm (IVar emptyFC nm) named, positionals)
-  traverseTupList' (((MkArg _ _ _ _), nm) :: xs) | (DefImplicit def, named, positionals) =
-    (insert nm ?x_replaced_4 named, positionals)
+traverseTupList' = foldl regTup (empty, [])
+  where
+    regTup : (SortedMap Name TTImp, List Name) -> (Arg, Name) -> (SortedMap Name TTImp, List Name)
+    regTup (named, positionals) (arg, nm) = 
+      case arg.piInfo of
+        ImplicitArg => (insert nm (IVar emptyFC nm) named, positionals)
+        ExplicitArg => (named, nm :: positionals)
+        AutoImplicit => (insert nm (IVar emptyFC nm) named, positionals)
+        DefImplicit def => (insert nm ?x_replaced_0 named, positionals)
 
-acc_positionals : SortedMap Name Name -> (TTImp, Name) -> SortedMap Name Name
-acc_positionals a (IVar _ n, n') = insert n n' a
-acc_positionals a _ = a
+accPositionals : SortedMap Name Name -> (TTImp, Name) -> SortedMap Name Name
+accPositionals a (IVar _ n, n') = insert n n' a
+accPositionals a _ = a
 
-acc_nameds : SortedMap Name Name -> (Name, TTImp) -> SortedMap Name Name
-acc_nameds a (n', IVar _ n) = insert n n' a
-acc_nameds a _ = a
+accNameds : SortedMap Name Name -> (Name, TTImp) -> SortedMap Name Name
+accNameds a (n', IVar _ n) = insert n n' a
+accNameds a _ = a
 
 aliases : AppData -> Types.TypeInfo -> SortedMap Name Name
 aliases ad tinfo = do
   let (tyNamed, tyPositional) = traverseTupList' $ toList $ zip tinfo.args tinfo.argNames
   let explicits = getExplicits ad
-  let a = foldl acc_positionals empty $ zip explicits tyPositional
-  let b = foldl acc_nameds a $ SortedMap.toList ad.named
+  let a = foldl accPositionals empty $ zip explicits tyPositional
+  let b = foldl accNameds a $ SortedMap.toList ad.named
   b
-
 
 fullInvocation' : AppData -> Types.TypeInfo -> TTImp
 fullInvocation' ad tinfo = do
@@ -300,11 +298,11 @@ mapMono : (ConMono -> t) -> ConInfo na va -> Maybe t
 mapMono f (MkConInfo _ _ (Just mi)) = Just $ f mi
 mapMono _ _ = Nothing
 
-mapMonoA : Monad f => (ConMono -> f t) -> ConInfo na va -> f $ Maybe t
-mapMonoA f' (MkConInfo _ _ (Just mi)) = do
+mapMonoM : Monad f => (ConMono -> f t) -> ConInfo na va -> f $ Maybe t
+mapMonoM f' (MkConInfo _ _ (Just mi)) = do
   fmi <- f' mi
   pure $ Just fmi
-mapMonoA f (MkConInfo _ _ Nothing) = pure $ Nothing
+mapMonoM f (MkConInfo _ _ Nothing) = pure $ Nothing
 
 subInArgs' : SortedMap Name TTImp -> SortedMap Name TTImp -> List Arg -> List Arg
 subInArgs' _ _ [] = []
@@ -322,12 +320,13 @@ subInArgs : SortedMap Name TTImp -> List Arg -> List Arg
 subInArgs vMap = subInArgs' vMap empty
 
 ||| Assemble information about a constructor post-invocation
-assembleInfo : TaskData -> Con na va -> Either UnificationError (SortedMap Name TTImp, SortedMap Name TTImp) -> Elab $ ConInfo na va
+assembleInfo : TaskData -> Con na va -> Either UnificationError UnificationResult -> Elab $ ConInfo na va
 assembleInfo td con (Left _) = do
   (_, conSig) <- conInvocation con
   pure $ MkConInfo con conSig $ Nothing
-assembleInfo td con (Right (subL, subR)) = do
+assembleInfo td con (Right uniR) = do
   (_, conSig) <- lookupName con.name
+  let (subL, subR) = (uniR.lhsVars, uniR.rhsVars)
   let retType = substituteVariables subL td.outputInvocation
   let mSig = piAll retType $ subInArgs subR $ toList con.args
   pure $ MkConInfo con conSig $ Just $ MkConMono subL subR mSig
@@ -335,7 +334,7 @@ assembleInfo td con (Right (subL, subR)) = do
 ||| Assemble information about all constructors
 (.assembleInfo) :
      (td: TaskData)
-  -> List (Either UnificationError (SortedMap Name TTImp, SortedMap Name TTImp))
+  -> List (Either UnificationError UnificationResult)
   -> Elab $ List $ ConInfo td.typeInfo.arty td.typeInfo.args
 (.assembleInfo) td ur = traverse (uncurry (assembleInfo td)) $ zip td.typeInfo.cons ur
 
@@ -530,7 +529,7 @@ piAllRename a b = piAllRename' a b empty
 
 
 unpackPolySig' : TaskData -> ConInfo na va -> Elab $ Maybe TTImp
-unpackPolySig' td conI = mapMonoA inner conI
+unpackPolySig' td conI = mapMonoM inner conI
   where
     inner : ConMono -> Elab TTImp
     inner conM = do
@@ -548,7 +547,7 @@ unpackPolySig' td conI = mapMonoA inner conI
       pure pa2
 
 unpackMonoSig' : TaskData -> ConInfo na va -> Elab $ Maybe TTImp
-unpackMonoSig' td conI = mapMonoA inner conI
+unpackMonoSig' td conI = mapMonoM inner conI
   where
     inner : ConMono -> Elab TTImp
     inner conM = do
@@ -573,7 +572,7 @@ genPiEq ((x, y) :: xs) t =
 
 
 packPolySig' : TaskData -> ConInfo na va -> Elab $ Maybe TTImp
-packPolySig' td conI = mapMonoA inner conI
+packPolySig' td conI = mapMonoM inner conI
   where
     inner : ConMono -> Elab TTImp
     inner comM = do
@@ -591,7 +590,7 @@ packPolySig' td conI = mapMonoA inner conI
       pure pa2
 
 packMonoSig' : TaskData -> ConInfo na va -> Elab $ Maybe TTImp
-packMonoSig' td conI = mapMonoA inner conI
+packMonoSig' td conI = mapMonoM inner conI
   where
     inner : ConMono -> Elab TTImp
     inner comM = do
@@ -693,20 +692,14 @@ castInjImplSig convN td = genericSig td <$> inner
             `((~convVar ~xVar) ~=~ (~convVar ~yVar) -> ~xVar ~=~ ~yVar)
 
 castInjImplClaim : Name -> Name -> TaskData -> Elab Decl
-castInjImplClaim n convN td = do
-  sig <- castInjImplSig convN td
-  pure $ fnClaim n sig
+castInjImplClaim n convN td = fnClaim n <$> castInjImplSig convN td
 
 countExplicits : List Arg -> Nat
-countExplicits [] = 0
-countExplicits ((MkArg count ExplicitArg name type) :: xs) = S $ countExplicits xs
-countExplicits (_ :: xs) = countExplicits xs
-
-
+countExplicits = foldl (\a,b => if isExplicit b then S a else a) 0
 
 castInjImplDef : Name -> TaskData -> List (ConInfo na va)-> Elab Decl
 castInjImplDef nm td cis = do
-  clauses <- mapMaybe id <$> traverse (\x => mapMonoA (castInjClause x) x) cis
+  clauses <- mapMaybe id <$> traverse (\x => mapMonoM (castInjClause x) x) cis
   pure $ IDef emptyFC nm clauses
   where
     castInjClause : ConInfo na va -> ConMono -> Elab Clause
@@ -773,7 +766,7 @@ gatedLog' g d s e = gatedLog g d s $ pure e
 
 
 showUR : Show t => Either UnificationError t -> String
-showUR (Left _) = "<error>"
+showUR (Left ue) = "<error: \{prettyError @{ue.task} ue.kind}>"
 showUR (Right r) = show r
 
 
@@ -787,7 +780,7 @@ monomorphise l outputName = do
   unifyResults <- traverse (unifyCon taskData) taskData.typeInfo.cons
   logDebug "Unification results: \{joinBy "," $ map showUR unifyResults}"
 
-  conIs <- taskData.assembleInfo $ map (map (\x => (x.lhsVars, x.rhsVars))) unifyResults
+  conIs <- taskData.assembleInfo unifyResults
 
   let typeDecl = monoTypeDeclaration' taskData conIs
   logDebug "Type declaration : \{show typeDecl}"

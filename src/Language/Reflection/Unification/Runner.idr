@@ -7,7 +7,8 @@ doUnification' : (task : UnificationTask) -> Unification UnificationResult
 doUnification' task = do
   unifyExpr (tagLeft' task.lhs) (tagRight' task.rhs)
   state <- get
-  pure $ solveUState state
+  logMsg "unifier" 10 $ show state
+  solveUState state
 
 public export
 doUnification : Elaboration m => List (Name, TTImp) -> TTImp -> List (Name, TTImp) -> TTImp -> m $ Either UnificationError UnificationResult
@@ -15,6 +16,7 @@ doUnification lhsV lhs rhsV rhs = do
   let task = MkTask lhs (fromList lhsV) rhs (fromList rhsV)
   try (fail "") $ evalUni empty $ doUnification' task
 
+export
 doPretty : Elaboration m => List (Name, TTImp) -> TTImp -> List (Name, TTImp) -> TTImp -> m ()
 doPretty lhsV lhs rhsV rhs = do 
   uniR <- doUnification lhsV lhs rhsV rhs

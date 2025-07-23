@@ -83,6 +83,10 @@ dumpError : UnificationError -> String
 dumpError ue = "Error: \{prettyError @{ue.task} ue.kind}.\nStack trace: \n\{dumpStack @{ue.task} ue.stack}"
 
 public export
+Show UnificationError where
+  show = dumpError
+
+public export
 UMonadError : (Type -> Type) -> Type
 UMonadError = MonadError UnificationError
 

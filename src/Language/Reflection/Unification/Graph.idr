@@ -123,7 +123,8 @@ parameters {auto task : UnificationTask}
     case (getContent a state) of
       Nothing => pure ()
       Just expr => do
-        let subName : Name -> BucketData -> BucketData = (\n => {expr $= map $ map $ substituteVariable n expr})
+        let subName : Name -> BucketData -> BucketData = (\n => 
+                      {expr $= map $ map $ substituteVariable n expr})
         modify {stateType=UnificationState} {buckets $= updateExisting (updateBucket subName dg) b}
         modify {stateType=DependencyGraph} $ delDep b a
         pure ()
@@ -181,6 +182,8 @@ record UnificationResult where
   constructor MkUR
   lhsVars : SortedMap Name TTImp
   rhsVars : SortedMap Name TTImp
+  lhsVarsEO : SortedMap Name TTImp
+  rhsVarsEO : SortedMap Name TTImp
   lhsFree : SortedSet Name
   rhsFree : SortedSet Name
   lhsFords : List (TTImp, TTImp)
@@ -212,49 +215,82 @@ parameters {auto task: UnificationTask}
       leaves => do
         subLeaves leaves state dg
 
+  findBDTag : BucketData -> Name -> Maybe $ Tag Name
+  findBDTag db n = sr $ Prelude.toList $ db.names
+    where
+      sr : List (Tag Name) -> Maybe $ Tag Name
+      sr [] = Nothing
+      sr (x :: xs) = if x.data == n then Just x else sr xs
+  
+  findSeparateOrigin : BucketData -> Origin -> Maybe $ Tag Name
+  findSeparateOrigin bd origin = sr $ Prelude.toList $ bd.names
+    where
+      sr : List (Tag Name) -> Maybe $ Tag Name
+      sr [] = Nothing
+      sr (x :: xs) = if x.origin /= origin then Just x else sr xs
+
+  searchNameByOrigin : UnificationState 
+                    -> Origin
+                    -> SortedMap Name TTImp 
+                    -> Name 
+                    -> SortedMap Name TTImp
+  searchNameByOrigin ust o sm n = fromMaybe sm found
+    where
+    found : Maybe $ SortedMap Name TTImp
+    found = do
+      bid <- lookup (MkTag o empty n) ust.nameToBucket
+      bd <- lookup bid ust.buckets
+      bTag <- findBDTag bd n
+      expr <- (case bd.expr of
+                Just x => Just $ x.data
+                Nothing => IVar EmptyFC <$> (.data) <$> (findSeparateOrigin bd bTag.origin))
+      Just $ insert n expr sm
+  
+  searchNameByOrigin' : UnificationState 
+                    -> Origin
+                    -> SortedMap Name TTImp 
+                    -> Name 
+                    -> SortedMap Name TTImp
+  searchNameByOrigin' ust o sm n = fromMaybe sm found
+    where
+    found : Maybe $ SortedMap Name TTImp
+    found = do
+      bid <- lookup (MkTag o empty n) ust.nameToBucket
+      bd <- lookup bid ust.buckets
+      bTag <- findBDTag bd n
+      expr <- bd.expr
+      Just $ insert n expr.data sm
+
   public export
-  consolidateUState :
-    UnificationState -> (SortedMap Name TTImp, SortedMap Name TTImp)
+  consolidateUState : UnificationState 
+                   -> (SortedMap Name TTImp, SortedMap Name TTImp)
   consolidateUState ustate = do
     let dg = getDepGraph ustate
     let (ns, ndg) = fillIn ustate dg
     let lhs_r = foldl (searchNameByOrigin ns Left) empty (keys task.lhsVars)
     let rhs_r = foldl (searchNameByOrigin ns Right) empty (keys task.rhsVars)
     (lhs_r, rhs_r)
-    where
-      searchNameByOrigin :
-           UnificationState
-        -> Origin
-        -> SortedMap Name TTImp -> Name -> SortedMap Name TTImp
-      searchNameByOrigin ust o sm n = fromMaybe sm found
-        where
-        found : Maybe $ SortedMap Name TTImp
-        found = do
-          bid <- lookup (MkTag o empty n) ust.nameToBucket
-          bd <- lookup bid ust.buckets
-          expr <- bd.expr
-          Just $ insert n expr.data sm
+      
+  subIn : Tag TTImp -> Origin -> SortedMap Name TTImp -> TTImp
+  subIn t@(MkTag origin aliasMap inner) o' names = 
+    if origin == o' then substituteVariables names inner else inner
+
+  fordSub : List (Tag TTImp, Tag TTImp) -> Origin -> SortedMap Name TTImp -> List (TTImp, TTImp)
+  fordSub [] _ _ = []
+  fordSub ((x,y) :: xs) o ns = (subIn x o ns, subIn y o ns) :: fordSub xs o ns
 
   public export
-  solveUState : UnificationState -> UnificationResult
+  solveUState : UnificationState -> Unification UnificationResult
   solveUState ustate = do
     let dg = getDepGraph ustate
+    logMsg "unifier" 10 "dg: \{show dg}"
     let (ns, ndg) = fillIn ustate dg
+    logMsg "unifier" 10 "ns: \{show ns}"
+    logMsg "unifier" 10 "ndg: \{show ndg}"
     let lhsR = foldl (searchNameByOrigin ns Left) empty (keys task.lhsVars)
     let rhsR = foldl (searchNameByOrigin ns Right) empty (keys task.rhsVars)
+    let lhsR' = foldl (searchNameByOrigin' ns Left) empty (keys task.lhsVars)
+    let rhsR' = foldl (searchNameByOrigin' ns Right) empty (keys task.rhsVars)
     let lhsFree = difference (fromList $ keys task.lhsVars) (fromList $ keys lhsR)
     let rhsFree = difference (fromList $ keys task.rhsVars) (fromList $ keys rhsR)
-    MkUR lhsR rhsR lhsFree rhsFree [] []
-    where
-      searchNameByOrigin :
-           UnificationState
-        -> Origin
-        -> SortedMap Name TTImp -> Name -> SortedMap Name TTImp
-      searchNameByOrigin ust o sm n = fromMaybe sm found
-        where
-        found : Maybe $ SortedMap Name TTImp
-        found = do
-          bid <- lookup (MkTag o empty n) ust.nameToBucket
-          bd <- lookup bid ust.buckets
-          expr <- bd.expr
-          Just $ insert n expr.data sm
+    pure $ MkUR lhsR rhsR lhsR' rhsR' lhsFree rhsFree (fordSub ustate.fords Right rhsR) (fordSub ustate.fords Left lhsR)
