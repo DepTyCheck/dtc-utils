@@ -25,6 +25,9 @@ import public Control.Monad.Reader.Tuple
 
 %language ElabReflection
 
+||| Valid type task interface
+|||
+||| Auto-implemented by any Type or any function that returns Type.
 public export
 interface TypeTask (t : Type) where
 
@@ -34,6 +37,7 @@ TypeTask Type
 public export
 TypeTask b => TypeTask (a -> b)
 
+||| Extract contents of a lambda
 taskInvocation : Elaboration m => TTImp -> m TTImp
 taskInvocation (ILam _ _ _ _ _ r) = taskInvocation r
 taskInvocation x@(IApp _ _ _) = pure x
@@ -43,6 +47,7 @@ taskInvocation x@(IWithApp _ _ _) = pure x
 taskInvocation x@(IVar _ _) = pure x
 taskInvocation x = failAt (getFC x) "Failed to extract invocation from lambda"
 
+||| Extract a task's inner typename
 taskTName : TTImp -> Elab Name
 taskTName (IVar _ n) = pure n
 taskTName (IApp _ f _) = taskTName f
@@ -51,6 +56,7 @@ taskTName (IAutoApp _ f _) = taskTName f
 taskTName (IWithApp _ f _) = taskTName f
 taskTName t = failAt (getFC t) "Couldn't get type name"
 
+||| Extract the lambda's arguments as a list
 freeVarsLambda : TTImp -> List (Name, TTImp)
 freeVarsLambda (ILam _ _ _ (Just n) a r) = (n, a) :: freeVarsLambda r
 freeVarsLambda (ILam _ _ _ Nothing _ r) = freeVarsLambda r
@@ -116,7 +122,6 @@ getTask l' outputName = do
                                 , cons
                                 }
 
-
   pure $ MkTask { taskQuote
                 , taskType
                 , typeName
@@ -124,144 +129,138 @@ getTask l' outputName = do
                 , type = taskTypeInfo
                 }
 
-runCons : TaskOp m =>
-          (f : ReaderT (Task, ConInfo) m t) ->
+mapCons : Monad m =>
+          (f : Task -> ConInfo -> m t) -> 
+          Task -> 
           m $ List t
-runCons f = do
-  task <- ask
-  traverse (\x => runReaderT (task, x) f) task.type.cons
+mapCons f task = traverse (f task) task.type.cons
 
-runCons_ : TaskOp m =>
-           (f : ReaderT (Task, ConInfo) m t) ->
-           m ()
-runCons_ f = runCons f *> pure ()
+mapCons_ : Monad m =>
+          (f : Task -> ConInfo -> m t) -> 
+          Task -> 
+          m ()
+mapCons_ f task = mapCons f task *> pure ()
 
-
-runUConsM : TaskOp m =>
-            MonadState TaskState m =>
-            (f : ReaderT (Task, ConInfo, Either UnificationError UnificationResult) m t) ->
+mapUConsM : Monad m =>
+            (f : Task -> ConInfo -> Either UnificationError UnificationResult -> m t) ->
+            Task ->
+            TaskState ->
             m $ List t
-runUConsM f = do
-  task <- ask
-  unis <- gets unis
-  traverse (\x => runReaderT (task, x) f) $ zip task.type.cons unis
+mapUConsM f task state =
+  traverse (\(x, y) => f task x y) $ zip task.type.cons state.unis
 
-runUConsM_ : TaskOp m =>
-             MonadState TaskState m =>
-             (f : ReaderT (Task, ConInfo, Either UnificationError UnificationResult) m t) ->
-             m ()
-runUConsM_ f = runUConsM_ f *> pure ()
+mapUConsM_ : Monad m =>
+            (f : Task -> ConInfo -> Either UnificationError UnificationResult -> m t) ->
+            Task ->
+            TaskState ->
+            m ()
+mapUConsM_ f task state = mapUConsM f task state *> pure ()
 
-runUCons : TaskOp m =>
-           MonadState TaskState m =>
-           (f : ReaderT (Task, ConInfo, UnificationResult) m t) ->
+mapUCons : Monad m =>
+           (f : Task -> ConInfo -> UnificationResult -> m t) ->
+           Task ->
+           TaskState ->
            m $ List t
-runUCons f = do
-  task <- ask
-  unis <- gets unis
-  traverseA (\x => runReaderT (task, x) f) $ zip task.type.cons unis
+mapUCons f task state = traverseA (\(x, y) => f task x y) $ zip task.type.cons state.unis
   where
     traverseA : ((ConInfo, UnificationResult) -> m t) -> List (ConInfo, Either UnificationError UnificationResult) -> m $ List t
     traverseA _ [] = pure []
     traverseA f ((ci, Left _) :: xs) = traverseA f xs
     traverseA f ((ci, Right ui) :: xs) = pure $ !(f (ci, ui)) :: !(traverseA f xs)
 
-runUCons_ : TaskOp m =>
-            MonadState TaskState m =>
-            (f : ReaderT (Task, ConInfo, UnificationResult) m t) ->
+mapUCons_ : Monad m =>
+            (f : Task -> ConInfo -> UnificationResult -> m t) ->
+            Task ->
+            TaskState ->
             m ()
-runUCons_ f = runUCons f *> pure ()
+mapUCons_ f task taskState = mapUCons f task taskState *> pure ()
 
 arg2tup : Arg -> (Name, TTImp)
 arg2tup (MkArg count piInfo Nothing type) = (?nameImpossible, type)
 arg2tup (MkArg count piInfo (Just x) type) = (x, type)
 
-unifyCon : ConOp m =>
-           Elaboration m =>
+unifyCon : Elaboration m =>
+           Task -> ConInfo ->
            m $ Either UnificationError UnificationResult
-unifyCon = do
-  task : Task <- ask
-  ci : ConInfo <- ask
+unifyCon task ci = do
   let (targs, tret) = unPi task.taskType
   let (cargs, cret) = unPi ci.sig
   inv <- taskInvocation task.taskQuote
-  doUnification (freeVarsLambda task.taskQuote) 
+  doUnification (freeVarsLambda task.taskQuote)
                 inv (map arg2tup cargs) cret
 
 assembleApp : List Arg -> TTImp -> TTImp
 assembleApp [] x = x
-assembleApp ((MkArg count ImplicitArg name type) :: xs) y 
+assembleApp ((MkArg count ImplicitArg name type) :: xs) y
   = assembleApp xs $ INamedApp EmptyFC y (fromMaybe ?impp name) $ IVar EmptyFC $ fromMaybe ?imp name
-assembleApp ((MkArg count ExplicitArg name type) :: xs) y 
+assembleApp ((MkArg count ExplicitArg name type) :: xs) y
   = assembleApp xs $ IApp EmptyFC y $ IVar EmptyFC $ fromMaybe ?imp1 name
-assembleApp ((MkArg count AutoImplicit name type) :: xs) y 
+assembleApp ((MkArg count AutoImplicit name type) :: xs) y
   = assembleApp xs $ IAutoApp EmptyFC y $ IVar EmptyFC $ fromMaybe ?imp2 name
-assembleApp ((MkArg count (DefImplicit x) name type) :: xs) y 
+assembleApp ((MkArg count (DefImplicit x) name type) :: xs) y
   = assembleApp xs $ INamedApp EmptyFC y (fromMaybe ?imp3 name) $ IVar EmptyFC $ fromMaybe ?imp4 name
 
 amendCArgs : List Arg -> SortedMap Name TTImp -> SortedMap Name TTImp -> List Arg
 amendCArgs [] _ _ = []
-amendCArgs ((MkArg count piInfo Nothing type) :: xs) rhsS acting 
+amendCArgs ((MkArg count piInfo Nothing type) :: xs) rhsS acting
   = MkArg count piInfo Nothing (substituteVariables acting type) :: amendCArgs xs rhsS acting
 amendCArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting with (lookup x rhsS)
-  amendCArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting | Nothing 
+  amendCArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting | Nothing
     = MkArg count piInfo (Just x) (substituteVariables acting type) :: amendCArgs xs rhsS acting
-  amendCArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting | Just tv 
+  amendCArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting | Just tv
     = amendCArgs xs rhsS (insert x tv acting)
 
-
-
-mkMonoConInfo : UniConOp m =>
+mkMonoConInfo : Monad m =>
+                Task -> ConInfo ->
+                UnificationResult ->
                 m ConInfo
-mkMonoConInfo = do
-  task : Task <- ask
-  ci : ConInfo <- ask
-  cu : UnificationResult <- ask
+mkMonoConInfo task ci cu = do
   let (targs, _) = unPi task.taskType
   let (cargs, cret) = unPi ci.sig
   let retTy' = assembleApp targs $ IVar EmptyFC task.outputName
   let retTy = substituteVariables cu.lhsVars retTy'
   let amended = amendCArgs cargs cu.rhsVarsEO empty
-  pure $ MkConInfo ci.name $ piAll retTy amended
+  pure $ MkConInfo (dropNS ci.name) $ piAll retTy amended
 
-mkMonoTy : TaskOp m =>
-           MonadState TaskState m =>
+mkMonoTy : Monad m =>
+           Task -> TaskState ->
            m Monomorphisation2.TypeInfo
-mkMonoTy = do
-  task <- ask
-  cons <- runUCons mkMonoConInfo
+mkMonoTy task state = do
+  cons <- mapUCons mkMonoConInfo task state
   pure $ MkTypeInfo task.outputName task.taskType cons
 
 (.ity) : ConInfo -> ITy
 (.ity) ci = mkTy (dropNS ci.name) ci.sig
 
 (.decl) : Monomorphisation2.TypeInfo -> Decl
-(.decl) ti = iData Public ti.name ti.sig [] $ map (.ity) ti.cons 
+(.decl) ti = iData Public ti.name ti.sig [] $ map (.ity) ti.cons
 
 ||| Emit all the necessary information
-monoEmit : TaskOp m => MonadState TaskState m =>
-           Elaboration m =>
-           m ()
-monoEmit = do
-  state <- get
+monoEmit : Elaboration m =>
+           Task -> TaskState -> m ()
+monoEmit task state = do
   logMsg "monomorphiser" 0 "Unifieds: \{show state.unis}"
-  ty <- mkMonoTy
+  ty <- mkMonoTy task state
   logMsg "monomorphiser" 0 "Generated type: \{show ty}"
+  let tydecl = ty.decl
+  logMsg "monomorphiser" 0 "Generated decl: \{show tydecl}"
+  let nsname : String = show task.outputName
+  declare $ [INamespace EmptyFC (MkNS [nsname]) [tydecl]]
   pure ()
 
 ||| Unify constructors
-monoTask : TaskOp m => Elaboration m => m ()
-monoTask = do
-  uni_res <- runCons unifyCon
+monoTask : Elaboration m => Task -> m ()
+monoTask task = do
+  uni_res <- mapCons unifyCon task
   let state = MkTaskState uni_res
-  evalStateT {m} state monoEmit
+  monoEmit task state
 
 ||| Monomorphise a type based on a lambda and a name
 public export
 monomorphise : TypeTask l => l -> Name -> Elab ()
 monomorphise l outputName = do
   task <- getTask l outputName
-  runReaderT {m=Elab} task monoTask
+  monoTask task
 
 %macro
 public export
