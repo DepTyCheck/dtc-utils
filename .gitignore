@@ -2,3 +2,4 @@ build/
 *.*~
 test/failures
 test/unification/*/output
+test/.build
