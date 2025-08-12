@@ -52,6 +52,35 @@ data IRTerm : (vs : Nat) -> (bjn : Nat) -> Type where
 
   IRPrim      : Constant -> IRTerm vs bjn
 
+public export
+Eq (IRTerm vs bjn)
+
+pinfoEq : PiInfo (IRTerm vs bjn) -> PiInfo (IRTerm vs bjn) -> Bool
+pinfoEq ImplicitArg ImplicitArg = True
+pinfoEq ExplicitArg ExplicitArg = True
+pinfoEq AutoImplicit AutoImplicit = True
+pinfoEq (DefImplicit x) (DefImplicit x') = x == x'
+pinfoEq _ _ = False
+
+public export
+Eq (IRTerm vs bjn) where
+  (==) (IRFreeVar x) (IRFreeVar x') = x == x'
+  (==) (IRLocalVar x) (IRLocalVar x') = x == x'
+  (==) (IRGlobalVar nm) (IRGlobalVar nm') = nm == nm'
+  (==) IRType IRType = True
+  (==) (IRApp x y) (IRApp x' y') = x == x' && y == y'
+  (==) (IRAutoApp x y) (IRAutoApp x' y') = x == x' && y == y'
+  (==) (IRNamedApp x nm y) (IRNamedApp x' nm' y') = 
+    x == x' && y == y' && nm == nm'
+  (==) (IRLam rig pinfo nm x y) (IRLam rig' pinfo' nm' x' y') = 
+    rig == rig' && (assert_total pinfoEq pinfo pinfo') && nm == nm' && x == x' && y == y'
+  (==) (IRPi rig pinfo nm x y) (IRPi rig' pinfo' nm' x' y') = 
+    rig == rig' && (assert_total pinfoEq pinfo pinfo') && nm == nm' && x == x' && y == y'
+  (==) (IRLet rig nm type val body) (IRLet rig' nm' type' val' body') = 
+    rig == rig' && nm == nm' && type == type' && val == val' && body == body'
+  (==) (IRPrim c) (IRPrim c') = c == c'
+  (==) _ _ = False
+
 Show Count where
   show M0 = "0 "
   show M1 = "1 "
