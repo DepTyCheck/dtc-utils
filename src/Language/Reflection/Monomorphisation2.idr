@@ -48,7 +48,7 @@ taskInvocation x@(IVar _ _) = pure x
 taskInvocation x = failAt (getFC x) "Failed to extract invocation from lambda"
 
 ||| Extract a task's inner typename
-taskTName : TTImp -> Elab Name
+taskTName : Elaboration m => TTImp -> m Name
 taskTName (IVar _ n) = pure n
 taskTName (IApp _ f _) = taskTName f
 taskTName (INamedApp _ f _ _) = taskTName f
@@ -56,11 +56,6 @@ taskTName (IAutoApp _ f _) = taskTName f
 taskTName (IWithApp _ f _) = taskTName f
 taskTName t = failAt (getFC t) "Couldn't get type name"
 
-||| Extract the lambda's arguments as a list
-freeVarsLambda : TTImp -> List (Name, TTImp)
-freeVarsLambda (ILam _ _ _ (Just n) a r) = (n, a) :: freeVarsLambda r
-freeVarsLambda (ILam _ _ _ Nothing _ r) = freeVarsLambda r
-freeVarsLambda _ = []
 
 record ConInfo where
   constructor MkConInfo
@@ -83,29 +78,21 @@ record Task where
   taskType : TTImp
   typeName : Name
   outputName : Name
+  fullInvocation : TTImp
   type : Monomorphisation2.TypeInfo
 
 record TaskState where
   constructor MkTaskState
   unis : List $ Either UnificationError UnificationResult
 
-TaskOp : (Type -> Type) -> Type
-TaskOp m = (Monad m, MonadReader Task m)
-
-ConOp : (Type -> Type) -> Type
-ConOp m = (Monad m, MonadReader Task m, MonadReader ConInfo m)
-
-UniConOp : (Type -> Type) -> Type
-UniConOp m = (Monad m, MonadReader Task m, MonadReader ConInfo m, MonadReader UnificationResult m)
-
-convertCon : Con na va -> Elab ConInfo
+convertCon : Elaboration m => Con na va -> m ConInfo
 convertCon con = do
   (name, sig) <- lookupName con.name
   pure $ MkConInfo { name
                    , sig
                    }
 
-getTypeConstructors : Name -> Elab $ List ConInfo
+getTypeConstructors : Elaboration m => Name -> m $ List ConInfo
 getTypeConstructors typeName = do
   typeInfo <- Types.getInfo' typeName
   traverse convertCon typeInfo.cons
@@ -114,8 +101,8 @@ getTask : TypeTask l => l -> Name -> Elab Task
 getTask l' outputName = do
   taskQuote <- quote l'
   taskType <- quote l
-  invocation <- taskInvocation taskQuote
-  typeName <- taskTName invocation
+  fullInvocation <- taskInvocation taskQuote
+  typeName <- taskTName fullInvocation
   cons <- getTypeConstructors typeName
   let taskTypeInfo = MkTypeInfo { name = typeName
                                 , sig = taskType
@@ -127,6 +114,7 @@ getTask l' outputName = do
                 , typeName
                 , outputName
                 , type = taskTypeInfo
+                , fullInvocation
                 }
 
 mapCons : Monad m =>
@@ -183,32 +171,37 @@ unifyCon : Elaboration m =>
            Task -> ConInfo ->
            m $ Either UnificationError UnificationResult
 unifyCon task ci = do
-  let (targs, tret) = unPi task.taskType
+  let (targs, tret) = unLambda task.taskQuote
   let (cargs, cret) = unPi ci.sig
-  inv <- taskInvocation task.taskQuote
-  doUnification (freeVarsLambda task.taskQuote)
+  let inv = task.fullInvocation
+  doUnification (map arg2tup targs)
                 inv (map arg2tup cargs) cret
 
-assembleApp : List Arg -> TTImp -> TTImp
-assembleApp [] x = x
-assembleApp ((MkArg count ImplicitArg name type) :: xs) y
-  = assembleApp xs $ INamedApp EmptyFC y (fromMaybe ?impp name) $ IVar EmptyFC $ fromMaybe ?imp name
-assembleApp ((MkArg count ExplicitArg name type) :: xs) y
-  = assembleApp xs $ IApp EmptyFC y $ IVar EmptyFC $ fromMaybe ?imp1 name
-assembleApp ((MkArg count AutoImplicit name type) :: xs) y
-  = assembleApp xs $ IAutoApp EmptyFC y $ IVar EmptyFC $ fromMaybe ?imp2 name
-assembleApp ((MkArg count (DefImplicit x) name type) :: xs) y
-  = assembleApp xs $ INamedApp EmptyFC y (fromMaybe ?imp3 name) $ IVar EmptyFC $ fromMaybe ?imp4 name
+args2App : List Arg -> TTImp -> TTImp
+args2App [] x = x
+args2App ((MkArg count ImplicitArg name type) :: xs) y
+  = args2App xs $ INamedApp EmptyFC y (fromMaybe ?impp name) $ IVar EmptyFC $ fromMaybe ?imp name
+args2App ((MkArg count ExplicitArg name type) :: xs) y
+  = args2App xs $ IApp EmptyFC y $ IVar EmptyFC $ fromMaybe ?imp1 name
+args2App ((MkArg count AutoImplicit name type) :: xs) y
+  = args2App xs $ IAutoApp EmptyFC y $ IVar EmptyFC $ fromMaybe ?imp2 name
+args2App ((MkArg count (DefImplicit x) name type) :: xs) y
+  = args2App xs $ INamedApp EmptyFC y (fromMaybe ?imp3 name) $ IVar EmptyFC $ fromMaybe ?imp4 name
 
-amendCArgs : List Arg -> SortedMap Name TTImp -> SortedMap Name TTImp -> List Arg
-amendCArgs [] _ _ = []
-amendCArgs ((MkArg count piInfo Nothing type) :: xs) rhsS acting
-  = MkArg count piInfo Nothing (substituteVariables acting type) :: amendCArgs xs rhsS acting
-amendCArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting with (lookup x rhsS)
-  amendCArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting | Nothing
-    = MkArg count piInfo (Just x) (substituteVariables acting type) :: amendCArgs xs rhsS acting
-  amendCArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting | Just tv
-    = amendCArgs xs rhsS (insert x tv acting)
+(.outputInvocation) : Task -> TTImp
+(.outputInvocation) task = do
+  let (targs, _) = unPi task.taskType
+  args2App targs $ IVar EmptyFC task.outputName
+
+substituteInArgs : List Arg -> SortedMap Name TTImp -> SortedMap Name TTImp -> List Arg
+substituteInArgs [] _ _ = []
+substituteInArgs ((MkArg count piInfo Nothing type) :: xs) rhsS acting
+  = MkArg count piInfo Nothing (substituteVariables acting type) :: substituteInArgs xs rhsS acting
+substituteInArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting with (lookup x rhsS)
+  substituteInArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting | Nothing
+    = MkArg count piInfo (Just x) (substituteVariables acting type) :: substituteInArgs xs rhsS acting
+  substituteInArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting | Just tv
+    = substituteInArgs xs rhsS (insert x tv acting)
 
 mkMonoConInfo : Monad m =>
                 Task -> ConInfo ->
@@ -216,10 +209,9 @@ mkMonoConInfo : Monad m =>
                 m ConInfo
 mkMonoConInfo task ci cu = do
   let (targs, _) = unPi task.taskType
-  let (cargs, cret) = unPi ci.sig
-  let retTy' = assembleApp targs $ IVar EmptyFC task.outputName
-  let retTy = substituteVariables cu.lhsVars retTy'
-  let amended = amendCArgs cargs cu.rhsVarsEO empty
+  let (cargs, _) = unPi ci.sig
+  let retTy = substituteVariables cu.lhsVars task.outputInvocation
+  let amended = substituteInArgs cargs cu.rhsVarsEO empty
   pure $ MkConInfo (dropNS ci.name) $ piAll retTy amended
 
 mkMonoTy : Monad m =>
@@ -235,32 +227,59 @@ mkMonoTy task state = do
 (.decl) : Monomorphisation2.TypeInfo -> Decl
 (.decl) ti = iData Public ti.name ti.sig [] $ map (.ity) ti.cons
 
-||| Emit all the necessary information
-monoEmit : Elaboration m =>
-           Task -> TaskState -> m ()
-monoEmit task state = do
-  logMsg "monomorphiser" 0 "Unifieds: \{show state.unis}"
-  ty <- mkMonoTy task state
-  logMsg "monomorphiser" 0 "Generated type: \{show ty}"
-  let tydecl = ty.decl
-  logMsg "monomorphiser" 0 "Generated decl: \{show tydecl}"
-  let nsname : String = show task.outputName
-  declare $ [INamespace EmptyFC (MkNS [nsname]) [tydecl]]
-  pure ()
+||| Substitute IPis' return type and set all arguments to implicit
+rewireIPiImplicit : TTImp -> TTImp -> TTImp
+rewireIPiImplicit (IPi fc count pinfo mn arg ret) y = IPi fc count ImplicitArg mn arg $ rewireIPiImplicit ret y
+rewireIPiImplicit x y = y
 
-||| Unify constructors
-monoTask : Elaboration m => Task -> m ()
-monoTask task = do
-  uni_res <- mapCons unifyCon task
-  let state = MkTaskState uni_res
-  monoEmit task state
+||| Generate IPi with implicit type arguments and given return
+genericSig : Task -> TTImp -> TTImp
+genericSig task = rewireIPiImplicit task.taskType
+
+(.fullInvocation) : ConInfo -> TTImp
+(.fullInvocation) ci = args2App (fst $ unPi ci.sig) $ IVar EmptyFC ci.name
+
+mToPClause : Monad m => Task -> ConInfo -> UnificationResult -> m Clause
+mToPClause task ci uniRes = do
+  pure $ PatClause EmptyFC `(m2p_impl ~(ci.fullInvocation)) task.fullInvocation
+
+mToPDecls : Elaboration m =>
+             Task -> TaskState -> m $ List Decl
+mToPDecls task state = do
+  let sig = genericSig task `(~(task.outputInvocation) -> ~(task.fullInvocation))
+  clauses <- mapUCons mToPClause task state
+  pure [ IClaim $ NoFC $ MkIClaimData MW Public [] $ MkTy EmptyFC (NoFC "m2p_impl") sig
+       , IDef EmptyFC "m2p_impl" clauses
+       ]
+
+pToMClause : Monad m => Task -> ConInfo -> UnificationResult -> m Clause
+pToMClause task ci uniRes = do
+  pure $ PatClause EmptyFC `(m2p_impl ~(task.fullInvocation)) ci.fullInvocation
+
+pToMDecls : Elaboration m =>
+             Task -> TaskState -> m $ List Decl
+pToMDecls task state = do
+  let sig = genericSig task `(~(task.fullInvocation) -> ~(task.outputInvocation) )
+  clauses <- mapUCons mToPClause task state
+  pure [ IClaim $ NoFC $ MkIClaimData MW Public [] $ MkTy EmptyFC (NoFC "p2m_impl") sig
+       , IDef EmptyFC "p2m_impl" clauses
+       ]
 
 ||| Monomorphise a type based on a lambda and a name
 public export
 monomorphise : TypeTask l => l -> Name -> Elab ()
 monomorphise l outputName = do
   task <- getTask l outputName
-  monoTask task
+  uni_res <- mapCons unifyCon task
+  let state = MkTaskState uni_res
+  logMsg "monomorphiser" 0 "Unifieds: \{show state.unis}"
+  ty <- mkMonoTy task state
+  logMsg "monomorphiser" 0 "Generated type: \{show ty}"
+  let tydecl = ty.decl
+  logMsg "monomorphiser" 0 "Generated decl: \{show tydecl}"
+  let nsname : String = show task.outputName
+  toPoly <- mToPDecls task state
+  logMsg "monomorphiser" 0 "ToPoly: \{show toPoly}"
 
 %macro
 public export
