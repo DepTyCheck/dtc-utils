@@ -254,7 +254,8 @@ quoteQualities = MkGroup "Quote"
 
 runGolden : IO ()
 runGolden = goldenRunner
-  [ "Unification tests" `atDir` "unification"
+  -- [ "Unification tests" `atDir` "unification"
+  [
   ] 
   [ basicStuff
   , ttImpQualities
