@@ -10,6 +10,7 @@ import Language.Reflection.VarSubst
 import Hedgehog
 -- import Test.Golden.RunnerHelper
 import GoldenRunner
+import Unification
 
 %language ElabReflection
 
@@ -262,6 +263,7 @@ runGolden = goldenRunner
   , declQualities
   , clauseQualities
   , quoteQualities
+  , singleConversions
   ]
 
 
