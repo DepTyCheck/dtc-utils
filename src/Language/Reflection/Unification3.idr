@@ -16,14 +16,14 @@ import Data.Vect.Views
 ||| List of free variables in expression
 ||| @ vs amount of free variables
 data FreeVars : (vs : Nat) -> Type where
-  Lin : FreeVars 0
+  Lin  : FreeVars 0
   (:<) : FreeVars vs -> (Name, IRTerm vs 0) -> FreeVars (S vs)
 
 namespace FreeVars
   ||| Get a free variable's name and type by its de Bruijn index
   index : Fin vs -> FreeVars vs -> (Name, IRTerm vs 0)
-  index FZ (x :< (y, z)) = (y, raiseVs z)
-  index (FS x) (y :< z) = mapSnd raiseVs $ index x y
+  index FZ     (x :< (y, z)) = (y, raiseVs z)
+  index (FS x) (y :< z)      = mapSnd raiseVs $ index x y
 
 ||| Find the index of a free varible by its name
 queryFV : Name -> FreeVars vs -> Maybe $ Fin vs
@@ -34,7 +34,7 @@ queryFV nm (xs :< (nm', x)) = if nm == nm'
 
 ||| Find the name of a free variable by its index
 freeVarName : Fin vs -> FreeVars vs -> Name
-freeVarName FZ (x :< y) = fst y
+freeVarName FZ     (x :< y) = fst y
 freeVarName (FS x) (y :< z) = freeVarName x y
 
 ||| List of bound variable names in expression
@@ -42,13 +42,16 @@ freeVarName (FS x) (y :< z) = freeVarName x y
 namespace BoundVars
   public export
   data BoundVars : (bjn : Nat) -> Type where
-    Lin : BoundVars 0
+    Lin  : BoundVars 0
     (:<) : BoundVars vs -> Name -> BoundVars (S vs)
 
 ||| Find the index of a free variable by its name
 queryBV : Name -> BoundVars bjn -> Maybe $ Fin bjn
 queryBV nm [<] = Nothing
-queryBV nm (xs :< nm') = if nm == nm' then Just 0 else shift 1 <$> queryBV nm xs
+queryBV nm (xs :< nm') = 
+  if nm == nm' 
+     then Just 0 
+     else shift 1 <$> queryBV nm xs
 
 ||| Find the name of a bound variable by its index
 boundVarName : Fin bjn -> BoundVars bjn -> Name
@@ -63,69 +66,70 @@ assertName fc (Just n) = pure n
 
 convertToIR : MonadError ConversionError m => 
               FreeVars vs -> BoundVars bjn -> TTImp -> m $ IRTerm vs bjn
-convertToIR freeVars boundVars (IVar fc nm)
-  = pure $ fromMaybe (IRGlobalVar nm) $ 
+convertToIR freeVars boundVars (IVar fc nm) = 
+  pure $ 
+    fromMaybe (IRGlobalVar nm) $ 
       IRLocalVar <$> queryBV nm boundVars <|> 
       IRFreeVar  <$> queryFV nm freeVars
-convertToIR freeVars boundVars (IPi fc rig pinfo mnm argTy retTy) 
-  = pure $ IRPi rig 
-                !(traverse (convertToIR freeVars boundVars) pinfo) 
-                !(assertName fc mnm) 
-                !(convertToIR freeVars boundVars argTy) 
-                !(convertToIR freeVars (boundVars :< !(assertName fc mnm)) retTy)
-convertToIR freeVars boundVars (ILam fc rig pinfo mnm argTy lamTy) 
-  = pure $ IRLam rig 
-                 !(traverse (convertToIR freeVars boundVars) pinfo) 
-                 !(assertName fc mnm) 
-                 !(convertToIR freeVars boundVars argTy) 
-                 !(convertToIR freeVars (boundVars :< !(assertName fc mnm)) lamTy)
-convertToIR freeVars boundVars (ILet fc lhsFC rig nm nTy nVal scope) 
-  = pure $ IRLet rig nm 
-                  !(convertToIR freeVars boundVars nTy) 
-                  !(convertToIR freeVars boundVars nVal)
-                  !(convertToIR freeVars (boundVars :< nm) scope)
-convertToIR freeVars boundVars (IApp fc s t) 
-  = pure $ IRApp !(convertToIR freeVars boundVars s) 
-                 !(convertToIR freeVars boundVars t)
-convertToIR freeVars boundVars (INamedApp fc s nm t) 
-  = pure $ IRNamedApp !(convertToIR freeVars boundVars s) nm
-                      !(convertToIR freeVars boundVars t)
-convertToIR freeVars boundVars (IAutoApp fc s t) 
-  = pure $ IRAutoApp !(convertToIR freeVars boundVars s) 
-                     !(convertToIR freeVars boundVars t)
+convertToIR freeVars boundVars (IPi fc rig pinfo mnm argTy retTy) = 
+  pure $ IRPi rig 
+              !(traverse (convertToIR freeVars boundVars) pinfo) 
+              !(assertName fc mnm) 
+              !(convertToIR freeVars boundVars argTy) 
+              !(convertToIR freeVars (boundVars :< !(assertName fc mnm)) retTy)
+convertToIR freeVars boundVars (ILam fc rig pinfo mnm argTy lamTy) = 
+  pure $ IRLam rig 
+               !(traverse (convertToIR freeVars boundVars) pinfo) 
+               !(assertName fc mnm) 
+               !(convertToIR freeVars boundVars argTy) 
+               !(convertToIR freeVars (boundVars :< !(assertName fc mnm)) lamTy)
+convertToIR freeVars boundVars (ILet fc lhsFC rig nm nTy nVal scope) = 
+  pure $ IRLet rig nm 
+               !(convertToIR freeVars boundVars nTy) 
+               !(convertToIR freeVars boundVars nVal)
+               !(convertToIR freeVars (boundVars :< nm) scope)
+convertToIR freeVars boundVars (IApp fc s t) = 
+  pure $ IRApp !(convertToIR freeVars boundVars s) 
+               !(convertToIR freeVars boundVars t)
+convertToIR freeVars boundVars (INamedApp fc s nm t) = 
+  pure $ IRNamedApp !(convertToIR freeVars boundVars s) nm
+                    !(convertToIR freeVars boundVars t)
+convertToIR freeVars boundVars (IAutoApp fc s t) = 
+  pure $ IRAutoApp !(convertToIR freeVars boundVars s) 
+                   !(convertToIR freeVars boundVars t)
 convertToIR freeVars boundVars (IPrimVal fc c) = pure $ IRPrim c
 convertToIR freeVars boundVars (IType fc) = pure $ IRType
 convertToIR freeVars boundVars term = throwError $ UnsupportedExprError term
 
 convertFromIR : FreeVars vs -> BoundVars bjn -> IRTerm vs bjn -> TTImp
-convertFromIR freeVars boundVars (IRFreeVar x) 
-  = IVar EmptyFC $ freeVarName x freeVars
-convertFromIR freeVars boundVars (IRLocalVar x) 
-  = IVar EmptyFC $ boundVarName x boundVars
-convertFromIR freeVars boundVars (IRGlobalVar nm) 
-  = IVar EmptyFC nm
+convertFromIR freeVars boundVars (IRFreeVar x) = 
+  IVar EmptyFC $ freeVarName x freeVars
+convertFromIR freeVars boundVars (IRLocalVar x) = 
+  IVar EmptyFC $ boundVarName x boundVars
+convertFromIR freeVars boundVars (IRGlobalVar nm) = 
+  IVar EmptyFC nm
 convertFromIR freeVars boundVars IRType = IType EmptyFC
-convertFromIR freeVars boundVars (IRApp x y) 
-  = IApp EmptyFC (convertFromIR freeVars boundVars x) 
-                 (convertFromIR freeVars boundVars y)
-convertFromIR freeVars boundVars (IRAutoApp x y) 
-  = IAutoApp EmptyFC (convertFromIR freeVars boundVars x) 
-                     (convertFromIR freeVars boundVars y)
-convertFromIR freeVars boundVars (IRNamedApp x nm y) 
-  = INamedApp EmptyFC (convertFromIR freeVars boundVars x) nm 
-                      (convertFromIR freeVars boundVars y)
-convertFromIR freeVars boundVars (IRLam rig pinfo nm x y) 
-  = ILam EmptyFC rig (convertFromIR freeVars boundVars <$> pinfo) (Just nm) 
-                     (convertFromIR freeVars boundVars x) 
-                     (convertFromIR freeVars (boundVars :< nm) y)
-convertFromIR freeVars boundVars (IRPi rig pinfo nm x y) 
-  = IPi EmptyFC rig (convertFromIR freeVars boundVars <$> pinfo) (Just nm) 
-                    (convertFromIR freeVars boundVars x) 
-                    (convertFromIR freeVars (boundVars :< nm) y)
-convertFromIR freeVars boundVars (IRLet rig nm x y z) 
-  = ILet EmptyFC EmptyFC rig nm (convertFromIR freeVars boundVars x) 
-                                (convertFromIR freeVars boundVars y) 
-                                (convertFromIR freeVars (boundVars :< nm) z)
+convertFromIR freeVars boundVars (IRApp x y) = 
+  IApp EmptyFC (convertFromIR freeVars boundVars x) 
+               (convertFromIR freeVars boundVars y)
+convertFromIR freeVars boundVars (IRAutoApp x y) = 
+  IAutoApp EmptyFC (convertFromIR freeVars boundVars x) 
+                   (convertFromIR freeVars boundVars y)
+convertFromIR freeVars boundVars (IRNamedApp x nm y) = 
+  INamedApp EmptyFC (convertFromIR freeVars boundVars x) nm 
+                    (convertFromIR freeVars boundVars y)
+convertFromIR freeVars boundVars (IRLam rig pinfo nm x y) = 
+  ILam EmptyFC rig (convertFromIR freeVars boundVars <$> pinfo) (Just nm) 
+                   (convertFromIR freeVars boundVars x) 
+                   (convertFromIR freeVars (boundVars :< nm) y)
+convertFromIR freeVars boundVars (IRPi rig pinfo nm x y) = 
+  IPi EmptyFC rig (convertFromIR freeVars boundVars <$> pinfo) (Just nm) 
+                  (convertFromIR freeVars boundVars x) 
+                  (convertFromIR freeVars (boundVars :< nm) y)
+convertFromIR freeVars boundVars (IRLet rig nm x y z) = 
+  ILet EmptyFC EmptyFC rig nm (convertFromIR freeVars boundVars x) 
+                              (convertFromIR freeVars boundVars y) 
+                              (convertFromIR freeVars (boundVars :< nm) z)
 convertFromIR freeVars boundVars (IRPrim c) = IPrimVal EmptyFC c
 
 typeof : FreeVars vs -> IRTerm vs bjn -> IRTerm vs bjn

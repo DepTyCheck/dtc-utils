@@ -28,24 +28,29 @@ Traversable PiInfo where
 ||| @ bjn upper bound on the de bruijn index of bound variables
 public export
 data IRTerm : (vs : Nat) -> (bjn : Nat) -> Type where
-  IRFreeVar :  Fin vs -> IRTerm vs bjn
-  IRLocalVar : Fin bjn -> IRTerm vs bjn
+  IRFreeVar   :  Fin vs -> IRTerm vs bjn
+  IRLocalVar  : Fin bjn -> IRTerm vs bjn
   IRGlobalVar : Name -> IRTerm vs bjn
 
-  IRType :     IRTerm vs bjn
-  IRApp :      IRTerm vs bjn ->         IRTerm vs bjn -> IRTerm vs bjn
-  IRAutoApp :  IRTerm vs bjn ->         IRTerm vs bjn -> IRTerm vs bjn
-  IRNamedApp : IRTerm vs bjn -> Name -> IRTerm vs bjn -> IRTerm vs bjn
+  IRType      : IRTerm vs bjn
+  IRApp       : IRTerm vs bjn ->         IRTerm vs bjn -> IRTerm vs bjn
+  IRAutoApp   : IRTerm vs bjn ->         IRTerm vs bjn -> IRTerm vs bjn
+  IRNamedApp  : IRTerm vs bjn -> Name -> IRTerm vs bjn -> IRTerm vs bjn
 
-  IRLam :      Count -> PiInfo (IRTerm vs bjn) -> Name -> 
-                        IRTerm vs bjn -> IRTerm vs (S bjn) -> IRTerm vs bjn
-  IRPi  :      Count -> PiInfo (IRTerm vs bjn) -> Name -> 
-                        IRTerm vs bjn -> IRTerm vs (S bjn) -> IRTerm vs bjn
+  IRLam       : Count -> PiInfo (IRTerm vs bjn) -> 
+                Name -> IRTerm vs bjn -> 
+                IRTerm vs (S bjn) -> IRTerm vs bjn
+  IRPi        : Count -> PiInfo (IRTerm vs bjn) -> 
+                Name -> IRTerm vs bjn -> 
+                IRTerm vs (S bjn) -> IRTerm vs bjn
 
-  IRLet :      Count -> Name -> IRTerm vs bjn -> IRTerm vs bjn -> 
-                                IRTerm vs (S bjn) -> IRTerm vs bjn
+  IRLet       : Count -> Name -> 
+                (type: IRTerm vs bjn) -> 
+                (val: IRTerm vs bjn) -> 
+                (body: IRTerm vs (S bjn)) -> 
+                IRTerm vs bjn
 
-  IRPrim :     Constant -> IRTerm vs bjn
+  IRPrim      : Constant -> IRTerm vs bjn
 
 Show Count where
   show M0 = "0 "
@@ -63,7 +68,8 @@ Show (IRTerm vs bjn) where
   show (IRNamedApp x nm y) = "\{show x} {\{show nm}=\{show y}}"
   show (IRLam count pinfo nm x y) = "(\\ \{show count}\{show x} => \{show y})"
   show (IRPi count pinfo nm x y) = "(\{show count}\{show x}) -> \{show y}"
-  show (IRLet count nm x y z) = "let \{show count}\{show y} : \{show x} in \{show z}"
+  show (IRLet count nm x y z) = 
+    "let \{show count}\{show y} : \{show x} in \{show z}"
   show (IRPrim c) = show c
 
 ||| Raise the amount of free variables in a term by one
@@ -77,9 +83,12 @@ raiseVs IRType = IRType
 raiseVs (IRApp x y) = IRApp (raiseVs x) (raiseVs y)
 raiseVs (IRAutoApp x y) = IRAutoApp (raiseVs x) (raiseVs y)
 raiseVs (IRNamedApp x nm y) = IRNamedApp (raiseVs x) nm (raiseVs y)
-raiseVs (IRLam rig pinfo nm x y) = IRLam rig (raiseVs <$> pinfo) nm (raiseVs x) (raiseVs y)
-raiseVs (IRPi rig pinfo nm x y) = IRPi rig (raiseVs <$> pinfo) nm (raiseVs x) (raiseVs y)
-raiseVs (IRLet rig nm x y z) = IRLet rig nm (raiseVs x) (raiseVs y) (raiseVs z)
+raiseVs (IRLam rig pinfo nm x y) = 
+  IRLam rig (raiseVs <$> pinfo) nm (raiseVs x) (raiseVs y)
+raiseVs (IRPi rig pinfo nm x y) = 
+  IRPi rig (raiseVs <$> pinfo) nm (raiseVs x) (raiseVs y)
+raiseVs (IRLet rig nm x y z) = 
+  IRLet rig nm (raiseVs x) (raiseVs y) (raiseVs z)
 raiseVs (IRPrim c) = IRPrim c
 
 ||| Like `Data.Fin.shift`, but the sum in signature is backwards
@@ -120,12 +129,14 @@ raise' : (i : Nat) -> IRTerm vs bjn -> IRTerm vs (i + bjn)
 raise' i term = rewrite plusCommutative i bjn in raise i term
 
 -- TODO: document this!
-newJ : (i : Fin (S bjn)) -> (j : Fin (S bjn)) -> 
-       equalNat (finToNat i) (finToNat j) = False -> Fin bjn
-newJ FZ (FS x) p = x
-newJ (FS FZ) FZ p = FZ
+newJ : (i : Fin (S bjn)) -> 
+       (j : Fin (S bjn)) -> 
+       equalNat (finToNat i) (finToNat j) = False -> 
+       Fin bjn
+newJ FZ          (FS x) p = x
+newJ (FS FZ)     FZ p = FZ
 newJ (FS (FS x)) FZ p = FZ
-newJ (FS FZ) (FS y) p = FS $ newJ FZ y p
+newJ (FS FZ)     (FS y) p = FS $ newJ FZ y p
 newJ (FS (FS x)) (FS y) p = FS $ newJ (FS x) y p
 
 ||| Substitute a bound variable for a term in an expression
@@ -133,8 +144,10 @@ newJ (FS (FS x)) (FS y) p = FS $ newJ (FS x) y p
 ||| @ at   the variable to subsitute
 ||| @ term the term in which substitution occurs
 public export
-subst' : (new : IRTerm vs bjn) -> (at : Fin (S bjn)) -> 
-         (term : IRTerm vs (S bjn)) -> IRTerm vs bjn 
+subst' : (new : IRTerm vs bjn) -> 
+         (at : Fin (S bjn)) -> 
+         (into : IRTerm vs (S bjn)) -> 
+         IRTerm vs bjn 
 subst' new i (IRFreeVar id) = IRFreeVar id
 subst' new i (IRLocalVar j) with (i == j) proof p
   subst' new i (IRLocalVar j) | True =  new
@@ -143,8 +156,8 @@ subst' new i (IRGlobalVar gn) = IRGlobalVar gn
 subst' new i IRType = IRType
 subst' new i (IRApp l r) = IRApp (subst' new i l) (subst' new i r)
 subst' new i (IRAutoApp l r) = IRAutoApp (subst' new i l) (subst' new i r)
-subst' new i (IRNamedApp l nm r) = IRNamedApp (subst' new i l) nm 
-                                              (subst' new i r)
+subst' new i (IRNamedApp l nm r) = 
+  IRNamedApp (subst' new i l) nm (subst' new i r)
 subst' new i (IRLam rig pinfo nm tp body) = 
   IRLam rig (subst' new i <$> pinfo) nm (subst' new i tp) 
             (subst' (raise' 1 new) (shift 1 i) body)
@@ -169,8 +182,11 @@ isClosed IRType = True
 isClosed (IRApp l r) = isClosed l && isClosed r
 isClosed (IRAutoApp l r) = isClosed l && isClosed r
 isClosed (IRNamedApp l _ r) = isClosed l && isClosed r
-isClosed (IRLam rig pi _ tp body) = helpPi isClosed pi && isClosed tp && isClosed body
-isClosed (IRPi rig pi _ tp body) = helpPi isClosed pi && isClosed tp && isClosed body
-isClosed (IRLet rig _ nT nV inner) = isClosed nT && isClosed nV && isClosed inner
+isClosed (IRLam rig pi _ tp body) = 
+  helpPi isClosed pi && isClosed tp && isClosed body
+isClosed (IRPi rig pi _ tp body) = 
+  helpPi isClosed pi && isClosed tp && isClosed body
+isClosed (IRLet rig _ nT nV inner) = 
+  isClosed nT && isClosed nV && isClosed inner
 isClosed (IRPrim c) = True
 
