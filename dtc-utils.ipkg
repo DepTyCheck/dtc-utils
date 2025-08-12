@@ -30,6 +30,7 @@ modules = Language.Reflection.VarSubst
         , Language.Reflection.Monomorphisation
         , Language.Reflection.Unification3
         , Language.Reflection.Unification3.IR
+        , Language.Reflection.Unification3.Error
         , Language.Reflection.Monomorphisation2
 
 depends = contrib, elab-util, elab-pretty, prettier, elab-util-extra, i-hate-parens, mtl-tuple-impls, lens

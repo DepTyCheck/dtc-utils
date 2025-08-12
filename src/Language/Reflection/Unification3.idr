@@ -1,6 +1,7 @@
 module Language.Reflection.Unification3
 
-import Language.Reflection.Unification3.IR
+import public Language.Reflection.Unification3.IR
+import public Language.Reflection.Unification3.Error
 
 import Control.Monad.Error.Interface
 
@@ -11,16 +12,17 @@ import Language.Reflection.TTImp
 import Data.Fin
 import Data.Nat
 import Data.Vect
-import Data.Vect.Views
 
 ||| List of free variables in expression
 ||| @ vs amount of free variables
+public export
 data FreeVars : (vs : Nat) -> Type where
   Lin  : FreeVars 0
   (:<) : FreeVars vs -> (Name, IRTerm vs 0) -> FreeVars (S vs)
 
 namespace FreeVars
   ||| Get a free variable's name and type by its de Bruijn index
+  public export
   index : Fin vs -> FreeVars vs -> (Name, IRTerm vs 0)
   index FZ     (x :< (y, z)) = (y, raiseVs z)
   index (FS x) (y :< z)      = mapSnd raiseVs $ index x y
@@ -58,13 +60,12 @@ boundVarName : Fin bjn -> BoundVars bjn -> Name
 boundVarName FZ (x :< y) = y
 boundVarName (FS x) (y :< z) = boundVarName x y
 
-data ConversionError = UnsupportedExprError TTImp | NoNameError FC
-
-assertName : MonadError ConversionError m => FC -> Maybe Name -> m Name
+assertName : MonadError UnificationError m => FC -> Maybe Name -> m Name
 assertName fc Nothing  = throwError $ NoNameError fc
 assertName fc (Just n) = pure n
 
-convertToIR : MonadError ConversionError m => 
+public export
+convertToIR : MonadError UnificationError m => 
               FreeVars vs -> BoundVars bjn -> TTImp -> m $ IRTerm vs bjn
 convertToIR freeVars boundVars (IVar fc nm) = 
   pure $ 
@@ -99,8 +100,9 @@ convertToIR freeVars boundVars (IAutoApp fc s t) =
                    !(convertToIR freeVars boundVars t)
 convertToIR freeVars boundVars (IPrimVal fc c) = pure $ IRPrim c
 convertToIR freeVars boundVars (IType fc) = pure $ IRType
-convertToIR freeVars boundVars term = throwError $ UnsupportedExprError term
+convertToIR freeVars boundVars term = throwError $ UnsupportedExprTypeError $ getFC term
 
+public export
 convertFromIR : FreeVars vs -> BoundVars bjn -> IRTerm vs bjn -> TTImp
 convertFromIR freeVars boundVars (IRFreeVar x) = 
   IVar EmptyFC $ freeVarName x freeVars
@@ -159,10 +161,8 @@ typeof freeVars (IRPrim (Db dbl)) = ?tof_rhs_23
 typeof freeVars (IRPrim (PrT pty)) = ?tof_rhs_24
 typeof freeVars (IRPrim WorldVal) = IRType
 
-data ReductionError = AppReductionError
-
 -- TODO: Typechecking!
-appReduce : MonadError ReductionError m => 
+appReduce : MonadError UnificationError m => 
             (lhs : IRTerm vs bjn) -> (rhs: IRTerm vs bjn) -> m (IRTerm vs bjn)
 appReduce (IRLam _ ExplicitArg _ ty body) rhs = pure $ subst' rhs 0 body
 appReduce (IRLam rig pinfo nm ty body) rhs = IRLam rig pinfo nm ty <$> appReduce body (raise' 1 rhs)
@@ -172,7 +172,7 @@ appReduce (IRPi _ _ _ _ _) rhs = throwError AppReductionError
 appReduce (IRPrim _) rhs = throwError AppReductionError
 appReduce lhs rhs = pure lhs
 
-autoAppReduce : MonadError ReductionError m => 
+autoAppReduce : MonadError UnificationError m => 
                 (lhs : IRTerm vs bjn) -> (rhs : IRTerm vs bjn) -> m (IRTerm vs bjn)
 autoAppReduce (IRLam _ AutoImplicit _ ty body) rhs = pure $ subst' rhs 0 body
 autoAppReduce (IRLam rig pinfo nm ty body) rhs = IRLam rig pinfo nm ty <$> autoAppReduce body (raise' 1 rhs)
@@ -181,7 +181,7 @@ autoAppReduce (IRPi _ _ _ _ _) rhs = throwError AppReductionError
 autoAppReduce (IRPrim _) rhs = throwError AppReductionError
 autoAppReduce lhs rhs = pure lhs
 
-namedAppReduce : MonadError ReductionError m => 
+namedAppReduce : MonadError UnificationError m => 
                  (lhs : IRTerm vs bjn) -> Name -> (rhs : IRTerm vs bjn) -> m (IRTerm vs bjn)
 namedAppReduce (IRLam rig pinfo nm ty body) nm' rhs = if nm == nm' then pure $ subst' rhs 0 body else IRLam rig pinfo nm ty <$> namedAppReduce body nm' (raise' 1 rhs)
 namedAppReduce IRType nm rhs = throwError AppReductionError
@@ -189,7 +189,7 @@ namedAppReduce (IRPi _ _ _ _ _) nm rhs = throwError AppReductionError
 namedAppReduce (IRPrim _) nm rhs = throwError AppReductionError
 namedAppReduce lhs nm rhs = pure lhs
 
-reduce : MonadError ReductionError m => IRTerm vs bjn -> m $ IRTerm vs bjn
+reduce : MonadError UnificationError m => IRTerm vs bjn -> m $ IRTerm vs bjn
 reduce (IRFreeVar id) = pure $ IRFreeVar id
 reduce (IRLocalVar id) = pure $ IRLocalVar id
 reduce (IRGlobalVar gn) = pure $ IRGlobalVar gn
@@ -226,5 +226,3 @@ peelAppTelescope t = go t []
 
 applyAppTelescope : IRTerm vs bjn -> List (IRAppArg vs bjn) -> IRTerm vs bjn
 applyAppTelescope = foldl appArg
-
-data UnificationError = UConversionError ConversionError | UReductionError ReductionError
