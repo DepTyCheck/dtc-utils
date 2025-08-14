@@ -103,6 +103,15 @@ convertToIR freeVars boundVars (IType fc) = pure $ IRType
 convertToIR freeVars boundVars term = throwError $ UnsupportedExprTypeError $ getFC term
 
 public export
+convertFreeVars : MonadError UnificationError m => 
+                  (l : SnocList (Name, TTImp)) -> m $ FreeVars (length l)
+convertFreeVars [<] = pure [<]
+convertFreeVars (sx :< (n, t)) = do
+  fvs' <- convertFreeVars sx
+  x' <- convertToIR fvs' [<] t
+  pure $ fvs' :< (n, x')
+
+public export
 convertFromIR : FreeVars vs -> BoundVars bjn -> IRTerm vs bjn -> TTImp
 convertFromIR freeVars boundVars (IRFreeVar x) = 
   IVar EmptyFC $ freeVarName x freeVars
