@@ -179,7 +179,7 @@ appReduce (IRApp _ _) rhs = throwError AppReductionError
 appReduce IRType rhs = throwError AppReductionError
 appReduce (IRPi _ _ _ _ _) rhs = throwError AppReductionError
 appReduce (IRPrim _) rhs = throwError AppReductionError
-appReduce lhs rhs = pure lhs
+appReduce lhs rhs = pure $ IRApp lhs rhs
 
 autoAppReduce : MonadError UnificationError m => 
                 (lhs : IRTerm vs bjn) -> (rhs : IRTerm vs bjn) -> m (IRTerm vs bjn)
@@ -188,7 +188,7 @@ autoAppReduce (IRLam rig pinfo nm ty body) rhs = IRLam rig pinfo nm ty <$> autoA
 autoAppReduce IRType rhs = throwError AppReductionError
 autoAppReduce (IRPi _ _ _ _ _) rhs = throwError AppReductionError
 autoAppReduce (IRPrim _) rhs = throwError AppReductionError
-autoAppReduce lhs rhs = pure lhs
+autoAppReduce lhs rhs = pure $ IRAutoApp lhs rhs
 
 namedAppReduce : MonadError UnificationError m => 
                  (lhs : IRTerm vs bjn) -> Name -> (rhs : IRTerm vs bjn) -> m (IRTerm vs bjn)
@@ -196,8 +196,9 @@ namedAppReduce (IRLam rig pinfo nm ty body) nm' rhs = if nm == nm' then pure $ s
 namedAppReduce IRType nm rhs = throwError AppReductionError
 namedAppReduce (IRPi _ _ _ _ _) nm rhs = throwError AppReductionError
 namedAppReduce (IRPrim _) nm rhs = throwError AppReductionError
-namedAppReduce lhs nm rhs = pure lhs
+namedAppReduce lhs nm rhs = pure $ IRNamedApp lhs nm rhs
 
+public export
 reduce : MonadError UnificationError m => IRTerm vs bjn -> m $ IRTerm vs bjn
 reduce (IRFreeVar id) = pure $ IRFreeVar id
 reduce (IRLocalVar id) = pure $ IRLocalVar id
