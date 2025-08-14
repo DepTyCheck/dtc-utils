@@ -11,12 +11,12 @@ import Hedgehog
 
 assertConvertsTo : Monad m => TTImp -> FreeVars vs -> IRTerm vs 0 -> TestT m ()
 assertConvertsTo t fv expected = do
-  res <- evalEither $ convertToIR {m=Either UnificationError} fv [<] t
+  res <- evalEither {x=UnificationError} $ convertToIR fv [<] t
   res === expected
 
 assertConvertFails : Monad m => TTImp -> FreeVars vs -> TestT m ()
 assertConvertFails t fv =
-  assert $ isLeft $ convertToIR {m=Either UnificationError} fv [<] t
+  assert $ isLeft {a=UnificationError} $ convertToIR fv [<] t
 
 typeConverts : Property
 typeConverts = property1 $ do
@@ -30,6 +30,10 @@ primConverts = property1 $ do
 fvConverts : Property
 fvConverts = property1 $ do
   assertConvertsTo `(x) [< (`{x}, IRType)] $ IRFreeVar 0
+
+lambdaConverts : Property
+lambdaConverts = property1 $ do
+  assertConvertsTo `(\x:Nat => S x) [<] $ IRLam MW ExplicitArg `{x} (IRGlobalVar `{Nat}) $ IRApp (IRGlobalVar `{S}) (IRLocalVar 0)
   
 public export
 singleConversions : Group
@@ -37,4 +41,28 @@ singleConversions = MkGroup "Conversion of minimal expressions"
   [ ("IType -> IRType", typeConverts)
   , ("IPrimVal -> IRPrim", primConverts)
   , ("IVar -> IRFreeVar", fvConverts)
+  , ("ILam -> IRLam", lambdaConverts)
+  ]
+
+
+-- Reduction
+assertReducesTo : Monad m => SnocList (Name, TTImp) -> TTImp -> TTImp -> TestT m ()
+assertReducesTo freeVars from to = do
+  res <- evalEither {x=UnificationError} $ do
+    fvs <- convertFreeVars freeVars
+    from' <- convertToIR fvs [<] from
+    reduced <- reduce from'
+    pure $ convertFromIR fvs [<] reduced
+
+  res === to
+
+reducesTo : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> TTImp -> Property
+reducesTo {fvs} from to = property1 $ assertReducesTo fvs from to
+
+public export
+reductions : Group
+reductions = MkGroup "IR Reduction tests"
+  [ ("Global variables don't reduce", `(Nat) `reducesTo` `(Nat))
+  , ("Free variables don't reduce", reducesTo {fvs = [< (`{x}, `(Nat))]} `(x) `(x))
+  , ("(\\x=>S x) x -> S x", `((\x: Nat => S x) Z) `reducesTo` `(S Z))
   ]

@@ -264,6 +264,7 @@ runGolden = goldenRunner
   , clauseQualities
   , quoteQualities
   , singleConversions
+  , reductions
   ]
 
 
