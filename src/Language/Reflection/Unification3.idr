@@ -175,7 +175,7 @@ appReduce : MonadError UnificationError m =>
             (lhs : IRTerm vs bjn) -> (rhs: IRTerm vs bjn) -> m (IRTerm vs bjn)
 appReduce (IRLam _ ExplicitArg _ ty body) rhs = pure $ subst' rhs 0 body
 appReduce (IRLam rig pinfo nm ty body) rhs = IRLam rig pinfo nm ty <$> appReduce body (raise' 1 rhs)
-appReduce (IRApp _ _) rhs = throwError AppReductionError
+-- appReduce (IRApp _ _) rhs = throwError AppReductionError
 appReduce IRType rhs = throwError AppReductionError
 appReduce (IRPi _ _ _ _ _) rhs = throwError AppReductionError
 appReduce (IRPrim _) rhs = throwError AppReductionError
@@ -192,7 +192,10 @@ autoAppReduce lhs rhs = pure $ IRAutoApp lhs rhs
 
 namedAppReduce : MonadError UnificationError m => 
                  (lhs : IRTerm vs bjn) -> Name -> (rhs : IRTerm vs bjn) -> m (IRTerm vs bjn)
-namedAppReduce (IRLam rig pinfo nm ty body) nm' rhs = if nm == nm' then pure $ subst' rhs 0 body else IRLam rig pinfo nm ty <$> namedAppReduce body nm' (raise' 1 rhs)
+namedAppReduce (IRLam rig pinfo nm ty body) nm' rhs = 
+  if nm == nm' 
+     then pure $ subst' rhs 0 body 
+     else IRLam rig pinfo nm ty <$> namedAppReduce body nm' (raise' 1 rhs)
 namedAppReduce IRType nm rhs = throwError AppReductionError
 namedAppReduce (IRPi _ _ _ _ _) nm rhs = throwError AppReductionError
 namedAppReduce (IRPrim _) nm rhs = throwError AppReductionError
@@ -207,9 +210,10 @@ reduce IRType = pure $ IRType
 reduce (IRApp l r) = appReduce !(reduce l) !(reduce r)
 reduce (IRAutoApp l r) = autoAppReduce !(reduce l) !(reduce r)
 reduce (IRNamedApp l nm r) = namedAppReduce !(reduce l) nm !(reduce r)
-reduce (IRLam rig pinfo nm ty body) = do
+reduce (IRLam rig pinfo nm ty body) =
   pure $ IRLam rig !(traverse reduce pinfo) nm !(reduce ty) !(reduce body)
-reduce (IRPi rig pinfo nm ty body) = pure $ IRPi rig !(traverse reduce pinfo) nm !(reduce ty) !(reduce body)
+reduce (IRPi rig pinfo nm ty body) = 
+  pure $ IRPi rig !(traverse reduce pinfo) nm !(reduce ty) !(reduce body)
 reduce (IRLet rig nm nTy nVal inner) = pure $ subst' nVal 0 inner
 reduce (IRPrim c) = pure $ IRPrim c
 

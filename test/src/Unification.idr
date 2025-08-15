@@ -33,8 +33,22 @@ fvConverts = property1 $ do
 
 lambdaConverts : Property
 lambdaConverts = property1 $ do
-  assertConvertsTo `(\x:Nat => S x) [<] $ IRLam MW ExplicitArg `{x} (IRGlobalVar `{Nat}) $ IRApp (IRGlobalVar `{S}) (IRLocalVar 0)
+  assertConvertsTo `(\x:Nat => S x) [<] $ 
+    IRLam MW ExplicitArg `{x} (IRGlobalVar `{Nat}) $ 
+      IRApp (IRGlobalVar `{S}) (IRLocalVar 0)
+
+letConverts : Property
+letConverts = property1 $ do
+  assertConvertsTo `(let x : Nat = Z in S x) [<] $
+    IRLet MW `{x} (IRGlobalVar `{Nat}) (IRGlobalVar `{Z}) $
+      IRApp (IRGlobalVar `{S}) (IRLocalVar 0)
   
+letShadows : Property
+letShadows = property1 $ do
+  assertConvertsTo `(let x : Nat = Z in S x) [< (`{x}, IRGlobalVar `{Nat})] $
+    IRLet MW `{x} (IRGlobalVar `{Nat}) (IRGlobalVar `{Z}) $
+      IRApp (IRGlobalVar `{S}) (IRLocalVar 0)
+
 public export
 singleConversions : Group
 singleConversions = MkGroup "Conversion of minimal expressions" 
@@ -42,6 +56,8 @@ singleConversions = MkGroup "Conversion of minimal expressions"
   , ("IPrimVal -> IRPrim", primConverts)
   , ("IVar -> IRFreeVar", fvConverts)
   , ("ILam -> IRLam", lambdaConverts)
+  , ("ILet -> ILet", letConverts)
+  , ("ILet shadowing free variables", letShadows)
   ]
 
 
@@ -65,4 +81,11 @@ reductions = MkGroup "IR Reduction tests"
   [ ("Global variables don't reduce", `(Nat) `reducesTo` `(Nat))
   , ("Free variables don't reduce", reducesTo {fvs = [< (`{x}, `(Nat))]} `(x) `(x))
   , ("(\\x=>S x) x -> S x", `((\x: Nat => S x) Z) `reducesTo` `(S Z))
+  , ("(\\x,y=>x+y) 1 2 -> 1 + 2", `((\x: Nat, y: Nat => x+y) 1 2) `reducesTo` `(1 + 2))
+  -- TODO: this should actually be rejected!
+  , ("(\\x,y=>x+y) {x=1} 2 -> 1 + 2", `((\x: Nat, y: Nat => x+y) {x=1} 2) `reducesTo` `(1 + 2))
+  , ("(\\x,y=>x+y) 1 {y=2} -> 1 + 2", `((\x: Nat, y: Nat => x+y) 1 {y=2}) `reducesTo` `(1 + 2))
+  , ("(\\x,y=>x+y) {x=1} {y=2} -> 1 + 2", `((\x: Nat, y: Nat => x+y) {x=1} {y=2}) `reducesTo` `(1 + 2))
+  , ("(\\x,y=>x+y) {y=2} {x=1} -> 1 + 2", `((\x: Nat, y: Nat => x+y) {y=2} {x=1}) `reducesTo` `(1 + 2))
+  , ("let x=Z in S x -> S Z", `(let x : Nat = Z in S x) `reducesTo` `(S Z))
   ]
