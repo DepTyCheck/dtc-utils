@@ -8,6 +8,7 @@ import Control.Monad.Error.Interface
 import Language.Reflection
 import Language.Reflection.TT
 import Language.Reflection.TTImp
+import Language.Reflection.Syntax
 
 import Data.Fin
 import Data.Nat
@@ -143,32 +144,35 @@ convertFromIR freeVars boundVars (IRLet rig nm x y z) =
                               (convertFromIR freeVars (boundVars :< nm) z)
 convertFromIR freeVars boundVars (IRPrim c) = IPrimVal EmptyFC c
 
-typeof : FreeVars vs -> IRTerm vs bjn -> IRTerm vs bjn
-typeof freeVars (IRFreeVar x) = ?tof_rhs_0
+public export
+reduce : MonadError UnificationError m => IRTerm vs bjn -> m $ IRTerm vs bjn
+
+typeof : MonadError UnificationError m => {bjn : Nat} -> FreeVars vs -> IRTerm vs bjn -> m $ IRTerm vs bjn
+typeof freeVars (IRFreeVar x) = pure $ raise bjn $ snd $ index x freeVars
 typeof freeVars (IRLocalVar x) = ?tof_rhs_1
 typeof freeVars (IRGlobalVar nm) = ?tof_rhs_2
-typeof freeVars IRType = IRType
-typeof freeVars (IRApp x y) = ?tof_rhs_4
-typeof freeVars (IRAutoApp x y) = ?tof_rhs_5
-typeof freeVars (IRNamedApp x nm y) = ?tof_rhs_6
-typeof freeVars (IRLam rig pinfo nm x y) = IRPi rig pinfo nm x $ typeof freeVars y
-typeof freeVars (IRPi rig pinfo nm x y) = IRType
-typeof freeVars (IRLet rig nm x y z) = ?tof_rhs_9
-typeof freeVars (IRPrim (I i)) = ?tof_rhs_11
-typeof freeVars (IRPrim (BI i)) = ?tof_rhs_12
-typeof freeVars (IRPrim (I8 i)) = ?tof_rhs_13
-typeof freeVars (IRPrim (I16 i)) = ?tof_rhs_14
-typeof freeVars (IRPrim (I32 i)) = ?tof_rhs_15
-typeof freeVars (IRPrim (I64 i)) = ?tof_rhs_16
-typeof freeVars (IRPrim (B8 m)) = ?tof_rhs_17
-typeof freeVars (IRPrim (B16 m)) = ?tof_rhs_18
-typeof freeVars (IRPrim (B32 m)) = ?tof_rhs_19
-typeof freeVars (IRPrim (B64 m)) = ?tof_rhs_20
-typeof freeVars (IRPrim (Str str)) = ?tof_rhs_21
-typeof freeVars (IRPrim (Ch c)) = ?tof_rhs_22
-typeof freeVars (IRPrim (Db dbl)) = ?tof_rhs_23
-typeof freeVars (IRPrim (PrT pty)) = ?tof_rhs_24
-typeof freeVars (IRPrim WorldVal) = IRType
+typeof freeVars IRType = pure IRType
+typeof freeVars (IRApp x y) = reduce $ IRApp !(typeof freeVars x) y
+typeof freeVars (IRAutoApp x y) = reduce $ IRAutoApp !(typeof freeVars x) y
+typeof freeVars (IRNamedApp x nm y) = reduce $ IRNamedApp !(typeof freeVars x) nm y
+typeof freeVars (IRLam rig pinfo nm x y) = IRPi rig pinfo nm x <$> typeof freeVars y
+typeof freeVars (IRPi rig pinfo nm x y) = IRPi rig pinfo nm x <$> typeof freeVars y
+typeof freeVars (IRLet rig nm x y z) = IRLet rig nm x y <$> typeof freeVars z
+typeof freeVars (IRPrim (I i)) = pure $ IRGlobalVar "Int"
+typeof freeVars (IRPrim (BI i)) = pure $ IRGlobalVar "Integer"
+typeof freeVars (IRPrim (I8 i)) = pure $ IRGlobalVar "Int8"
+typeof freeVars (IRPrim (I16 i)) = pure $ IRGlobalVar "Int16"
+typeof freeVars (IRPrim (I32 i)) = pure $ IRGlobalVar "Int32"
+typeof freeVars (IRPrim (I64 i)) = pure $ IRGlobalVar "Int64"
+typeof freeVars (IRPrim (B8 m)) = pure $ IRGlobalVar "Bits8"
+typeof freeVars (IRPrim (B16 m)) = pure $ IRGlobalVar "Bits16"
+typeof freeVars (IRPrim (B32 m)) = pure $ IRGlobalVar "Bits32"
+typeof freeVars (IRPrim (B64 m)) = pure $ IRGlobalVar "Bits64"
+typeof freeVars (IRPrim (Str str)) = pure $ IRGlobalVar "String"
+typeof freeVars (IRPrim (Ch c)) = pure $ IRGlobalVar "Char"
+typeof freeVars (IRPrim (Db dbl)) = pure $ IRGlobalVar "Doublt"
+typeof freeVars (IRPrim (PrT pty)) = pure $ IRGlobalVar "PrimType"
+typeof freeVars (IRPrim WorldVal) = pure $ IRType
 
 -- TODO: Typechecking!
 appReduce : MonadError UnificationError m => 
@@ -201,8 +205,6 @@ namedAppReduce (IRPi _ _ _ _ _) nm rhs = throwError AppReductionError
 namedAppReduce (IRPrim _) nm rhs = throwError AppReductionError
 namedAppReduce lhs nm rhs = pure $ IRNamedApp lhs nm rhs
 
-public export
-reduce : MonadError UnificationError m => IRTerm vs bjn -> m $ IRTerm vs bjn
 reduce (IRFreeVar id) = pure $ IRFreeVar id
 reduce (IRLocalVar id) = pure $ IRLocalVar id
 reduce (IRGlobalVar gn) = pure $ IRGlobalVar gn
