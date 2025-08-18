@@ -224,8 +224,7 @@ mapAIR' : Applicative m =>
           (f : {0 bjn' : Nat} -> 
                (original : IRTerm vs bjn') -> 
                m (IRTerm vs bjn') -> 
-               m (IRTerm vs bjn')
-          ) -> 
+               m (IRTerm vs bjn')) -> 
           IRTerm vs bjn -> 
           m (IRTerm vs bjn)
 mapAIR' f t@(IRFreeVar x) = f t (pure t) 
@@ -247,26 +246,26 @@ mapAIR' f t@(IRPrim c) =  f t (pure t)
 
 public export %inline
 mapAIR : Applicative m => 
-         ({0 bjn' : Nat} -> m (IRTerm vs bjn') -> m (IRTerm vs bjn')) ->
+         (f : {0 bjn' : Nat} -> m (IRTerm vs bjn') -> m (IRTerm vs bjn')) ->
          IRTerm vs bjn ->
          m (IRTerm vs bjn)
 mapAIR f t = mapAIR' (\_ => f) t
 
 public export %inline
 mapMIR' : Monad m => 
-         ( {0 bjn' : Nat} -> 
-           (original: IRTerm vs bjn') -> 
-           (mapped : IRTerm vs bjn') -> 
-           m (IRTerm vs bjn')) ->
+         (f : {0 bjn' : Nat} -> 
+              (original: IRTerm vs bjn') -> 
+              (mapped : IRTerm vs bjn') -> 
+              m (IRTerm vs bjn')) ->
          IRTerm vs bjn ->
          m (IRTerm vs bjn)
 mapMIR' f t = mapAIR' (\o, m => m >>= f o) t
 
 public export %inline
 mapMIR : Monad m => 
-         ( {0 bjn' : Nat} -> 
-           (mapped : IRTerm vs bjn') -> 
-           m (IRTerm vs bjn')) ->
+         (f : {0 bjn' : Nat} -> 
+              (mapped : IRTerm vs bjn') -> 
+              m (IRTerm vs bjn')) ->
          IRTerm vs bjn ->
          m (IRTerm vs bjn)
 mapMIR f t = mapAIR' (\_, m => m >>= f) t
