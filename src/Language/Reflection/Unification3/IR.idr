@@ -219,3 +219,55 @@ isClosed (IRLet rig _ nT nV inner) =
   isClosed nT && isClosed nV && isClosed inner
 isClosed (IRPrim c) = True
 
+public export
+mapAIR' : Applicative m => 
+          (f : {0 bjn' : Nat} -> 
+               (original : IRTerm vs bjn') -> 
+               m (IRTerm vs bjn') -> 
+               m (IRTerm vs bjn')
+          ) -> 
+          IRTerm vs bjn -> 
+          m (IRTerm vs bjn)
+mapAIR' f t@(IRFreeVar x) = f t (pure t) 
+mapAIR' f t@(IRLocalVar x) = f t (pure t) 
+mapAIR' f t@(IRGlobalVar nm) = f t (pure t)
+mapAIR' f t@IRType = f t (pure t)
+mapAIR' f t@(IRApp x y) = f t $ IRApp <$> mapAIR' f x <*> mapAIR' f y
+mapAIR' f t@(IRAutoApp x y) = 
+  f t $ IRAutoApp <$> mapAIR' f x <*> mapAIR' f y
+mapAIR' f t@(IRNamedApp x nm y) = 
+  f t $ IRNamedApp <$> mapAIR' f x <*> pure nm <*> mapAIR' f y
+mapAIR' f t@(IRLam rig pinfo nm x y) = 
+  f t $ IRLam rig <$> traverse (mapAIR' f) pinfo <*> pure nm <*> mapAIR' f x <*> mapAIR' f y
+mapAIR' f t@(IRPi rig pinfo nm x y) = 
+  f t $ IRPi rig <$> traverse (mapAIR' f) pinfo <*> pure nm <*> mapAIR' f x <*> mapAIR' f y
+mapAIR' f t@(IRLet rig nm type val body) = 
+  f t $ IRLet rig nm <$> mapAIR' f type <*> mapAIR' f val <*> mapAIR' f body
+mapAIR' f t@(IRPrim c) =  f t (pure t)
+
+public export %inline
+mapAIR : Applicative m => 
+         ({0 bjn' : Nat} -> m (IRTerm vs bjn') -> m (IRTerm vs bjn')) ->
+         IRTerm vs bjn ->
+         m (IRTerm vs bjn)
+mapAIR f t = mapAIR' (\_ => f) t
+
+public export %inline
+mapMIR' : Monad m => 
+         ( {0 bjn' : Nat} -> 
+           (original: IRTerm vs bjn') -> 
+           (mapped : IRTerm vs bjn') -> 
+           m (IRTerm vs bjn')) ->
+         IRTerm vs bjn ->
+         m (IRTerm vs bjn)
+mapMIR' f t = mapAIR' (\o, m => m >>= f o) t
+
+public export %inline
+mapMIR : Monad m => 
+         ( {0 bjn' : Nat} -> 
+           (mapped : IRTerm vs bjn') -> 
+           m (IRTerm vs bjn')) ->
+         IRTerm vs bjn ->
+         m (IRTerm vs bjn)
+mapMIR f t = mapAIR' (\_, m => m >>= f) t
+

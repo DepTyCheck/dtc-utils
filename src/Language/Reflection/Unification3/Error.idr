@@ -11,8 +11,12 @@ import Language.Reflection.TTImp
 ||| Unification error
 public export
 data UnificationError =
-  ||| Attempting to unify an expression 
+  ||| Attempting to unify an usupported expression 
   UnsupportedExprTypeError FC |
+  ||| A global variable is ambiguous.
+  AmbiguousGlobalVarError Name (List Name) |
+  ||| Global variable not found
+  GlobalVarNotFound Name |
   ||| Attempting to unify a lambda or pi with an unnamed parameter
   |||
   ||| This should not occur when unifying expressions provided by 
@@ -24,6 +28,8 @@ data UnificationError =
 public export
 Show UnificationError where
   show (UnsupportedExprTypeError _) = "UnsupportedExprTypeError"
+  show (AmbiguousGlobalVarError n ns) = "AmbiguousGlobalVarError {\show n} {\show ns}"
+  show (GlobalVarNotFound nm) = "GlobalVarNotFound \{show nm}"
   show (NoNameError _) = "NoNameError"
   show AppReductionError = "AppReductionError"
 
