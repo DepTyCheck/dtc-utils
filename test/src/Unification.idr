@@ -1,6 +1,7 @@
 module Unification
 
 import Language.Reflection.Unification3
+import Language.Reflection.Unification3.Convert
 
 import Data.Either
 import Language.Reflection.TTImp
