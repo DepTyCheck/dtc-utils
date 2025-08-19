@@ -29,6 +29,11 @@ modules = Language.Reflection.VarSubst
         , Language.Reflection.Unification.State
         , Language.Reflection.Monomorphisation
         , Language.Reflection.Unification3
+        , Language.Reflection.Unification3.Context
+        , Language.Reflection.Unification3.Context.Main
+        , Language.Reflection.Unification3.Context.GlobalVars
+        , Language.Reflection.Unification3.Convert
+        , Language.Reflection.Unification3.Simplify
         , Language.Reflection.Unification3.IR
         , Language.Reflection.Unification3.Error
         , Language.Reflection.Monomorphisation2

@@ -95,10 +95,10 @@ Show (IRTerm vs bjn) where
   show (IRApp x y) = "\{show x} \{show y}"
   show (IRAutoApp x y) = "\{show x} @{\{show y}}"
   show (IRNamedApp x nm y) = "\{show x} {\{show nm}=\{show y}}"
-  show (IRLam count pinfo nm x y) = "(\\ \{show count}\{show x} => \{show y})"
-  show (IRPi count pinfo nm x y) = "(\{show count}\{show x}) -> \{show y}"
+  show (IRLam count pinfo nm x y) = "(\\ \{show count}\{show nm} : \{show x} => \{show y})"
+  show (IRPi count pinfo nm x y) = "(\{show count}\{show nm} : \{show x}) -> \{show y}"
   show (IRLet count nm x y z) = 
-    "let \{show count}\{show y} : \{show x} in \{show z}"
+    "let \{show count}\{show nm} : \{show x} = \{show y} in \{show z}"
   show (IRPrim c) = show c
 
 ||| Raise the amount of free variables in a term by one
@@ -160,7 +160,7 @@ raise' i term = rewrite plusCommutative i bjn in raise i term
 -- TODO: document this!
 newJ : (i : Fin (S bjn)) -> 
        (j : Fin (S bjn)) -> 
-       equalNat (finToNat i) (finToNat j) = False -> 
+       (i == j) = False -> 
        Fin bjn
 newJ FZ          (FS x) p = x
 newJ (FS FZ)     FZ p = FZ
