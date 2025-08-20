@@ -12,6 +12,8 @@ import Language.Reflection.Unification3.Convert
 
 import Data.SortedMap
 
+%default total
+
 public export
 GlobalVars : (fvs : Nat) -> Type
 GlobalVars fvs = SortedMap Name (IRTerm fvs 0, NameType)

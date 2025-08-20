@@ -12,6 +12,8 @@ import Language.Reflection.Unification3.Error
 import Data.Fin
 import Data.SortedMap
 
+%default total
+
 ||| List of free variables in expression
 ||| @ fvs amount of free variables
 public export

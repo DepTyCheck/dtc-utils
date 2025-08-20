@@ -13,6 +13,8 @@ import Language.Reflection
 import Language.Reflection.TT
 import Language.Reflection.TTImp
 
+%default total
+
 ||| Throw an error st FC if Nothing, otherwise return name
 assertName : MonadError UnificationError m => FC -> Maybe Name -> m Name
 assertName fc Nothing  = throwError $ NoNameError fc
@@ -27,12 +29,12 @@ convertToIR freeVars boundVars (IVar fc nm) =
       IRLocalVar <$> queryBN nm boundVars <|> 
       IRFreeVar  <$> queryFV nm freeVars
 convertToIR freeVars boundVars (IPi fc rig pinfo mnm argTy retTy) = 
-  IRPi rig <$> traverse (convertToIR freeVars boundVars) pinfo
+  IRPi rig <$> traverse (assert_total convertToIR freeVars boundVars) pinfo
            <*> assertName fc mnm
            <*> convertToIR freeVars boundVars argTy
            <*> convertToIR freeVars (boundVars :< !(assertName fc mnm)) retTy
 convertToIR freeVars boundVars (ILam fc rig pinfo mnm argTy lamTy) = 
-  IRLam rig <$> traverse (convertToIR freeVars boundVars) pinfo
+  IRLam rig <$> traverse (assert_total convertToIR freeVars boundVars) pinfo
             <*> assertName fc mnm
             <*> convertToIR freeVars boundVars argTy
             <*> convertToIR freeVars (boundVars :< !(assertName fc mnm)) lamTy
@@ -82,11 +84,11 @@ convertFromIR freeVars boundVars (IRNamedApp x nm y) =
   INamedApp EmptyFC (convertFromIR freeVars boundVars x) nm 
                     (convertFromIR freeVars boundVars y)
 convertFromIR freeVars boundVars (IRLam rig pinfo nm x y) = 
-  ILam EmptyFC rig (convertFromIR freeVars boundVars <$> pinfo) (Just nm) 
+  ILam EmptyFC rig (assert_total convertFromIR freeVars boundVars <$> pinfo) (Just nm) 
                    (convertFromIR freeVars boundVars x) 
                    (convertFromIR freeVars (boundVars :< nm) y)
 convertFromIR freeVars boundVars (IRPi rig pinfo nm x y) = 
-  IPi EmptyFC rig (convertFromIR freeVars boundVars <$> pinfo) (Just nm) 
+  IPi EmptyFC rig (assert_total convertFromIR freeVars boundVars <$> pinfo) (Just nm) 
                   (convertFromIR freeVars boundVars x) 
                   (convertFromIR freeVars (boundVars :< nm) y)
 convertFromIR freeVars boundVars (IRLet rig nm x y z) = 

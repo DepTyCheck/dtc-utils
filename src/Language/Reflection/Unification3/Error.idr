@@ -8,6 +8,8 @@ import Language.Reflection
 import Language.Reflection.TT
 import Language.Reflection.TTImp
 
+%default total
+
 ||| Unification error
 public export
 data UnificationError =

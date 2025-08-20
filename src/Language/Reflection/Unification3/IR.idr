@@ -11,6 +11,10 @@ import Data.Nat
 import Data.Vect
 import Data.Vect.Views
 
+import Data.Fin.ToFin
+
+%default total
+
 public export
 Foldable PiInfo where
   foldr f acc (DefImplicit x) = f x acc
@@ -113,9 +117,9 @@ raiseVs (IRApp x y) = IRApp (raiseVs x) (raiseVs y)
 raiseVs (IRAutoApp x y) = IRAutoApp (raiseVs x) (raiseVs y)
 raiseVs (IRNamedApp x nm y) = IRNamedApp (raiseVs x) nm (raiseVs y)
 raiseVs (IRLam rig pinfo nm x y) = 
-  IRLam rig (raiseVs <$> pinfo) nm (raiseVs x) (raiseVs y)
+  IRLam rig (assert_total raiseVs <$> pinfo) nm (raiseVs x) (raiseVs y)
 raiseVs (IRPi rig pinfo nm x y) = 
-  IRPi rig (raiseVs <$> pinfo) nm (raiseVs x) (raiseVs y)
+  IRPi rig (assert_total raiseVs <$> pinfo) nm (raiseVs x) (raiseVs y)
 raiseVs (IRLet rig nm x y z) = 
   IRLet rig nm (raiseVs x) (raiseVs y) (raiseVs z)
 raiseVs (IRPrim c) = IRPrim c
@@ -141,10 +145,10 @@ raise = go 0
   go lower i (IRAutoApp l r)          = IRAutoApp  (go lower i l) (go lower i r)
   go lower i (IRNamedApp l nm r)      = IRNamedApp (go lower i l) nm 
                                                    (go lower i r)
-  go lower i (IRLam rig pinfo nm tp body) = IRLam  rig (go lower i <$> pinfo) nm 
+  go lower i (IRLam rig pinfo nm tp body) = IRLam  rig (assert_total go lower i <$> pinfo) nm 
                                                    (go lower i tp) 
                                                    (go (S lower) i body)
-  go lower i (IRPi rig pinfo nm tp body)  = IRPi   rig (go lower i <$> pinfo) nm 
+  go lower i (IRPi rig pinfo nm tp body)  = IRPi   rig (assert_total go lower i <$> pinfo) nm 
                                                    (go lower i tp) 
                                                    (go (S lower) i body)
   go lower i (IRLet rig nm nTy nVal inner) = IRLet rig nm  (go lower i nTy)
@@ -188,10 +192,10 @@ subst' new i (IRAutoApp l r) = IRAutoApp (subst' new i l) (subst' new i r)
 subst' new i (IRNamedApp l nm r) = 
   IRNamedApp (subst' new i l) nm (subst' new i r)
 subst' new i (IRLam rig pinfo nm tp body) = 
-  IRLam rig (subst' new i <$> pinfo) nm (subst' new i tp) 
+  IRLam rig (assert_total subst' new i <$> pinfo) nm (subst' new i tp) 
             (subst' (raise' 1 new) (shift 1 i) body)
 subst' new i (IRPi rig pinfo nm tp body) = 
-  IRPi rig (subst' new i <$> pinfo) nm (subst' new i tp) 
+  IRPi rig (assert_total subst' new i <$> pinfo) nm (subst' new i tp) 
            (subst' (raise' 1 new) (shift 1 i) body)
 subst' new i (IRLet rig nm nTy nVal inner) = 
   IRLet rig nm (subst' new i nTy) (subst' new i nVal) 
@@ -212,12 +216,41 @@ isClosed (IRApp l r) = isClosed l && isClosed r
 isClosed (IRAutoApp l r) = isClosed l && isClosed r
 isClosed (IRNamedApp l _ r) = isClosed l && isClosed r
 isClosed (IRLam rig pi _ tp body) = 
-  helpPi isClosed pi && isClosed tp && isClosed body
+  helpPi (assert_total isClosed) pi && isClosed tp && isClosed body
 isClosed (IRPi rig pi _ tp body) = 
-  helpPi isClosed pi && isClosed tp && isClosed body
+  helpPi (assert_total isClosed) pi && isClosed tp && isClosed body
 isClosed (IRLet rig _ nT nV inner) = 
   isClosed nT && isClosed nV && isClosed inner
 isClosed (IRPrim c) = True
+
+unbindImpl : (x : Nat) -> IRTerm vs bjn -> Maybe $ IRTerm vs x
+unbindImpl f (IRFreeVar x) = Just $ IRFreeVar x
+unbindImpl f (IRLocalVar x) = IRLocalVar <$> tryToFit x
+unbindImpl f (IRGlobalVar nm) = Just $ IRGlobalVar nm
+unbindImpl f IRType = Just $ IRType
+unbindImpl f (IRApp x y) = IRApp <$> unbindImpl f x <*> unbindImpl f y
+unbindImpl f (IRAutoApp x y) = IRAutoApp <$> unbindImpl f x <*> unbindImpl f y
+unbindImpl f (IRNamedApp x nm y) = 
+  IRNamedApp <$> unbindImpl f x <*> pure nm <*> unbindImpl f y
+unbindImpl f (IRLam rig pinfo nm x y) = 
+  IRLam rig <$> traverse (assert_total unbindImpl f) pinfo
+            <*> pure nm
+            <*> unbindImpl f x
+            <*> unbindImpl (S f) y
+unbindImpl f (IRPi rig pinfo nm x y) = 
+  IRPi rig <$> traverse (assert_total unbindImpl f) pinfo
+           <*> pure nm
+           <*> unbindImpl f x
+           <*> unbindImpl (S f) y
+unbindImpl f (IRLet rig nm type val body) = 
+  IRLet rig nm <$> unbindImpl f type 
+               <*> unbindImpl f val 
+               <*> unbindImpl (S f) body
+unbindImpl f (IRPrim c) = Just $ IRPrim c
+
+public export
+unbind : IRTerm vs bjn -> Maybe $ IRTerm vs 0
+unbind = unbindImpl 0
 
 public export
 mapAIR' : Applicative m => 
@@ -237,9 +270,9 @@ mapAIR' f t@(IRAutoApp x y) =
 mapAIR' f t@(IRNamedApp x nm y) = 
   f t $ IRNamedApp <$> mapAIR' f x <*> pure nm <*> mapAIR' f y
 mapAIR' f t@(IRLam rig pinfo nm x y) = 
-  f t $ IRLam rig <$> traverse (mapAIR' f) pinfo <*> pure nm <*> mapAIR' f x <*> mapAIR' f y
+  f t $ IRLam rig <$> traverse (assert_total mapAIR' f) pinfo <*> pure nm <*> mapAIR' f x <*> mapAIR' f y
 mapAIR' f t@(IRPi rig pinfo nm x y) = 
-  f t $ IRPi rig <$> traverse (mapAIR' f) pinfo <*> pure nm <*> mapAIR' f x <*> mapAIR' f y
+  f t $ IRPi rig <$> traverse (assert_total mapAIR' f) pinfo <*> pure nm <*> mapAIR' f x <*> mapAIR' f y
 mapAIR' f t@(IRLet rig nm type val body) = 
   f t $ IRLet rig nm <$> mapAIR' f type <*> mapAIR' f val <*> mapAIR' f body
 mapAIR' f t@(IRPrim c) =  f t (pure t)
