@@ -25,6 +25,20 @@ import Data.SortedMap
 Bundle : Nat -> Nat -> Type
 Bundle fvs bjn = (FreeVars fvs, BoundVars fvs bjn, IRTerm fvs bjn)
 
+HelpLR : (Nat -> t) -> (isLeft : Bool) -> (fvsL : Nat) -> (fvsR : Nat) -> t
+HelpLR f isLeft fvsL fvsR =
+  if isLeft then f fvsL else f fvsR
+
+IRTerm' : Bool -> Nat -> Nat -> Nat -> Type
+IRTerm' b fvsL fvsR = IRTerm (if b then fvsL else fvsR)
+
+Bundle' : Bool -> Nat -> Nat -> Nat -> Type
+Bundle' b fvsL fvsR = Bundle (if b then fvsL else fvsR)
+
+Constraints' : Bool -> Nat -> Nat ->Type
+Constraints' isLeft fvs fvs' = Constraints (if isLeft then fvs else fvs') (if isLeft then fvs' else fvs)
+
+
 ||| Tries to reduce a bundle
 |||
 ||| Errors if functions are applied with incorrect arguments (TODO explain further)
@@ -34,8 +48,12 @@ reduce : Monad m =>
          MonadError UnificationError m => 
          MonadState (Constraints fvsL fvsR) m =>
          GlobalVars ->
-         Either (Bundle fvsL bjn) (Bundle fvsR bjn) -> 
-         m $ Either (IRTerm fvsL bjn) (IRTerm fvsR bjn)
+         (isLeft : Bool) ->
+         Bundle' isLeft fvsL fvsR bjn ->
+         m $ IRTerm' isLeft fvsL fvsR bjn
+
+
+
 
 ||| Given the context of free and bound variables, determine the type of an expression
 ||| If contains type of expression 
@@ -45,8 +63,9 @@ typeof : Monad m =>
          MonadState (Constraints fvsL fvsR) m =>
          {bjn : Nat} -> 
          GlobalVars -> 
-         Either (Bundle fvsL bjn) (Bundle fvsR bjn) ->
-         m $ Either (IRTerm fvsL bjn) (IRTerm fvsR bjn)
+         (isLeft : Bool) ->
+         Bundle' isLeft fvsL fvsR bjn ->
+         m $ IRTerm' isLeft fvsL fvsR bjn
 
 ||| Register that the two expressions must be equal
 public export
@@ -54,8 +73,10 @@ unify : Monad m =>
         MonadError UnificationError m =>
         MonadState (Constraints fvsL fvsR) m =>
         GlobalVars ->
-        Either (Bundle fvsL bjn) (Bundle fvsR bjn) ->
-        Either (Bundle fvsL bjn') (Bundle fvsR bjn') ->
+        (isLeft : Bool) -> 
+        Bundle' isLeft fvsL fvsR bjn ->
+        (isLeft' : Bool) ->
+        Bundle' isLeft' fvsL fvsR bjn ->
         m $ ()
 
 typeofConst : Constant -> IRTerm fvs bjn
@@ -75,66 +96,46 @@ typeofConst (Db dbl) = IRGlobalVar "Double"
 typeofConst (PrT pty) = IRGlobalVar "PrimType"
 typeofConst WorldVal = IRType
 
-typeofL : Monad m =>
-          MonadError UnificationError m => 
-          MonadState (Constraints fvsL fvsR) m =>
-          {bjn : Nat} -> 
-          GlobalVars -> 
-          Bundle fvsL bjn ->
-          m $ IRTerm fvsL bjn
-typeofL gv (fv, bv, (IRFreeVar x)) = 
+typeof' : Monad m =>
+          MonadError UnificationError m =>
+          {bjn : Nat} ->
+          (isLeft : Bool) ->
+          MonadState (Constraints' isLeft fvs fvs') m =>
+          GlobalVars ->
+          Bundle fvs bjn ->
+          m $ IRTerm fvs bjn
+typeof' isLeft gv (fv, bv, (IRFreeVar x)) = 
   pure $ raise bjn $ snd $ index x fv
-typeofL gv (fv, bv, (IRLocalVar x)) = 
+typeof' isLeft gv (fv, bv, (IRLocalVar x)) = 
   pure $ snd $ index x bv
-typeofL gv (fv, bv, (IRGlobalVar nm)) =
+typeof' isLeft gv (fv, bv, (IRGlobalVar nm)) =
   case lookup nm gv of
     Just (t, _) => pure $ setFV $ raise bjn t
     Nothing => throwError $ GlobalVarNotFound nm
-typeofL gv (fv, bv, IRType) = pure IRType
-typeofL gv (fv, bv, (IRApp x y)) = ?typeofl_rhs_4
-typeofL gv (fv, bv, (IRAutoApp x y)) = ?typeofl_rhs_5
-typeofL gv (fv, bv, (IRNamedApp x nm y)) = ?typeofl_rhs_6
-typeofL gv (fv, bv, (IRLam rig pinfo nm x y)) =
+typeof' isLeft gv (fv, bv, IRType) = pure IRType
+typeof' isLeft gv (fv, bv, (IRApp x y)) = ?typeof_rhs_4
+typeof' isLeft gv (fv, bv, (IRAutoApp x y)) = ?typeof_rhs_5
+typeof' isLeft gv (fv, bv, (IRNamedApp x nm y)) = ?typeof_rhs_6
+typeof' isLeft gv (fv, bv, (IRPi rig pinfo nm x y)) = pure IRType
+typeof' isLeft gv (fv, bv, (IRPrim c)) = pure $ typeofConst c
+typeof' isLeft gv (fv, bv, (IRLam rig pinfo nm x y)) with (
   IRPi rig pinfo nm x <$>
-    assert_total typeofL gv (fv, bv :< (nm, x), y)
-typeofL gv (fv, bv, (IRPi rig pinfo nm x y)) = pure IRType
-typeofL gv (fv, bv, (IRLet rig nm type val body)) = do
-  valT <- typeofL gv (fv, bv, val)
-  unify gv (Left (fv, bv, valT)) (Left (fv, bv, type))
-  assert_total typeofL gv (fv, bv, subst' val 0 body)
-typeofL gv (fv, bv, (IRPrim c)) = pure $ typeofConst c
+  assert_total (typeof' {m} {fvs'} isLeft gv (fv, bv :< (nm, x), y)))
+  typeof' True _ (_, _, (IRLam _ _ _ _ _)) | res = res
+  typeof' False _ (_, _, (IRLam _ _ _ _ _)) | res = res
 
-typeofR : Monad m =>
-          MonadError UnificationError m => 
-          MonadState (Constraints fvsL fvsR) m =>
-          {bjn : Nat} -> 
-          GlobalVars -> 
-          Bundle fvsR bjn ->
-          m $ IRTerm fvsR bjn
-typeofR gv (fv, bv, (IRFreeVar x)) = 
-  pure $ raise bjn $ snd $ index x fv
-typeofR gv (fv, bv, (IRLocalVar x)) = 
-  pure $ snd $ index x bv
-typeofR gv (fv, bv, (IRGlobalVar nm)) =
-  case lookup nm gv of
-    Just (t, _) => pure $ setFV $ raise bjn t
-    Nothing => throwError $ GlobalVarNotFound nm
-typeofR gv (fv, bv, IRType) = pure IRType
-typeofR gv (fv, bv, (IRApp x y)) = ?typeofR_rhs_4
-typeofR gv (fv, bv, (IRAutoApp x y)) = ?typeofR_rhs_5
-typeofR gv (fv, bv, (IRNamedApp x nm y)) = ?typeofR_rhs_6
-typeofR gv (fv, bv, (IRLam rig pinfo nm x y)) =
-  IRPi rig pinfo nm x <$>
-    assert_total typeofR gv (fv, bv :< (nm, x), y)
-typeofR gv (fv, bv, (IRPi rig pinfo nm x y)) = pure IRType
-typeofR gv (fv, bv, (IRLet rig nm type val body)) = do
-  valT <- typeofR gv (fv, bv, val)
-  unify gv (Right (fv, bv, valT)) (Right (fv, bv, type))
-  assert_total typeofR gv (fv, bv, subst' val 0 body)
-typeofR gv (fv, bv, (IRPrim c)) = pure $ typeofConst c
+typeof' True gv (fv, bv, (IRLet rig nm type val body)) = do
+  valT <- typeof' True gv (fv, bv, val)
+  unify gv True (fv, bv, valT) True (fv, bv, type)
+  assert_total typeof' True gv (fv, bv, subst' val 0 body)
 
-typeof gv (Left b)  = Left <$> typeofL gv b
-typeof gv (Right b) = Right <$> typeofR gv b
+typeof' False gv (fv, bv, (IRLet rig nm type val body)) = do
+  valT <- typeof' False gv (fv, bv, val)
+  unify gv False (fv, bv, valT) False (fv, bv, type)
+  assert_total typeof' False gv (fv, bv, subst' val 0 body)
+
+typeof gv False b = typeof' {m} False gv b
+typeof gv True b = typeof' {m} True gv b
 
 reduceL : Monad m =>
          MonadError UnificationError m => 
@@ -165,37 +166,51 @@ reduceL gv (fv, bv, (IRLet rig nm type val body)) =
   pure $ subst' val 0 body
 reduceL gv (fv, bv, (IRPrim c)) = pure $ IRPrim c
 
-reduceR : Monad m =>
-         MonadError UnificationError m => 
-         MonadState (Constraints fvsL fvsR) m =>
-         GlobalVars ->
-         Bundle fvsR bjn  -> 
-         m $ IRTerm fvsR bjn 
-reduceR gv (fv, bv, (IRFreeVar x)) = pure $ IRFreeVar x
-reduceR gv (fv, bv, (IRLocalVar x)) = pure $ IRLocalVar x
-reduceR gv (fv, bv, (IRGlobalVar nm)) = pure $ IRGlobalVar nm
-reduceR gv (fv, bv, IRType) = pure $ IRType
-reduceR gv (fv, bv, (IRApp x y)) = ?recucer_rhs
-reduceR gv (fv, bv, (IRAutoApp x y)) = ?reducer_rhs1
-reduceR gv (fv, bv, (IRNamedApp x nm y)) = ?reducer_rhs
-reduceR gv (fv, bv, (IRLam rig pinfo nm x y)) = 
-  IRLam rig 
-    <$> traverse (\n => assert_total reduceR gv (fv, bv, n)) pinfo
-    <*> pure nm
-    <*> reduceR gv (fv, bv, x)
-    <*> assert_total reduceR gv (fv, bv :< (nm, x), y)
-reduceR gv (fv, bv, (IRPi rig pinfo nm x y)) = 
- IRPi rig 
-    <$> traverse (\n => assert_total reduceR gv (fv, bv, n)) pinfo
-    <*> pure nm
-    <*> reduceR gv (fv, bv, x)
-    <*> assert_total reduceR gv (fv, bv :< (nm, x), y)
-reduceR gv (fv, bv, (IRLet rig nm type val body)) = 
-  pure $ subst' val 0 body
-reduceR gv (fv, bv, (IRPrim c)) = pure $ IRPrim c
+{b : Bool} -> Monad m => (ms1 : MonadState s1 m) => (ms2: MonadState s2 m) => MonadState (if b then s1 else s2) m where
+  get {b = True} = get @{ms1}
+  get {b = False} = get @{ms2}
+  put {b = True} = put @{ms1}
+  put {b = False} = put @{ms2}
+  state {b = True} = state @{ms1}
+  state {b = False} = state @{ms2}
 
-reduce gv (Left x) = Left <$> reduceL gv x
-reduce gv (Right x) = Right <$> reduceR gv x
+
+reduce' : Monad m =>
+          MonadError UnificationError m =>
+          (isLeft : Bool) ->
+          MonadState (Constraints' isLeft fvs fvs') m =>
+          GlobalVars ->
+          Bundle fvs bjn ->
+          m $ IRTerm fvs bjn
+reduce' isLeft gv (fv, bv, (IRFreeVar x)) = pure $ IRFreeVar x
+reduce' isLeft gv (fv, bv, (IRLocalVar x)) = pure $ IRLocalVar x
+reduce' isLeft gv (fv, bv, (IRGlobalVar nm)) = pure $ IRGlobalVar nm
+reduce' isLeft gv (fv, bv, IRType) = pure $ IRType
+reduce' isLeft gv (fv, bv, (IRApp x y)) = ?red_rhs_0
+reduce' isLeft gv (fv, bv, (IRAutoApp x y)) = ?red_rhs_1
+reduce' isLeft gv (fv, bv, (IRNamedApp x nm y)) = ?red_rhs_2
+reduce' isLeft gv (fv, bv, (IRPrim c)) = pure $ IRPrim c
+reduce' isLeft gv (fv, bv, (IRLet rig nm type val body)) = 
+  pure $ subst' val 0 body
+reduce' isLeft gv (fv, bv, (IRLam rig pinfo nm x y)) with (
+  IRLam rig 
+    <$> traverse (\n => assert_total (reduce' {fvs'} isLeft gv (fv, bv, n))) pinfo
+    <*> pure nm
+    <*> reduce' {m} {fvs'} isLeft gv (fv, bv, x)
+    <*> assert_total (reduce' {fvs'} isLeft gv (fv, bv :< (nm, x), y)))
+  reduce' True gv (fv, bv, (IRLam rig pinfo nm x y)) | res = res
+  reduce' False gv (fv, bv, (IRLam rig pinfo nm x y)) | res = res
+reduce' isLeft gv (fv, bv, (IRPi rig pinfo nm x y)) with (
+  IRPi rig 
+    <$> traverse (\n => assert_total (reduce' {fvs'} isLeft gv (fv, bv, n))) pinfo
+    <*> pure nm
+    <*> reduce' {m} {fvs'} isLeft gv (fv, bv, x)
+    <*> assert_total (reduce' {fvs'} isLeft gv (fv, bv :< (nm, x), y)))
+  reduce' True gv (fv, bv, (IRPi rig pinfo nm x y)) | res = res
+  reduce' False gv (fv, bv, (IRPi rig pinfo nm x y)) | res = res
+
+reduce gv False b = reduce' {m} False gv b
+reduce gv True b = reduce' {m} True gv b
 
 data IRAppType = IRExplicit | IRAutoImplicit | IRNamed Name
 
