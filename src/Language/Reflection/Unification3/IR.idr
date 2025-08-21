@@ -253,6 +253,22 @@ unbind : IRTerm vs bjn -> Maybe $ IRTerm vs 0
 unbind = unbindImpl 0
 
 public export
+setFV : IRTerm 0 bjn -> IRTerm fvs bjn
+setFV (IRLocalVar x) = IRLocalVar x
+setFV (IRGlobalVar nm) = IRGlobalVar nm
+setFV IRType = IRType
+setFV (IRApp x y) = IRApp (setFV x) (setFV y)
+setFV (IRAutoApp x y) = IRAutoApp (setFV x) (setFV y)
+setFV (IRNamedApp x nm y) = IRNamedApp (setFV x) nm (setFV y)
+setFV (IRLam rig pinfo nm x y) = 
+  IRLam rig (assert_total setFV <$> pinfo) nm (setFV x) (setFV y)
+setFV (IRPi rig pinfo nm x y) = 
+  IRPi rig (assert_total setFV <$> pinfo) nm (setFV x) (setFV y)
+setFV (IRLet rig nm type val body) =
+  IRLet rig nm (setFV type) (setFV val) (setFV body)
+setFV (IRPrim c) = IRPrim c
+
+public export
 mapAIR' : Applicative m => 
           (f : {0 bjn' : Nat} -> 
                (original : IRTerm vs bjn') -> 
