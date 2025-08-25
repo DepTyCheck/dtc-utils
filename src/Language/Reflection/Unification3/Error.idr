@@ -25,7 +25,11 @@ data UnificationError =
   ||| the Elab monad, since unnamed parameters receive machine-generated "names"
   NoNameError FC |
   ||| Error when reducing IApp
-  AppReductionError
+  AppReductionError |
+  ||| Left-hand side of a function application expression is not a function
+  AppBadLhsError | 
+  ||| Didn't find an appropriately named argument value during reduction
+  AppNameNotFoundError
 
 public export
 Show UnificationError where
@@ -34,6 +38,8 @@ Show UnificationError where
   show (GlobalVarNotFound nm) = "GlobalVarNotFound \{show nm}"
   show (NoNameError _) = "NoNameError"
   show AppReductionError = "AppReductionError"
+  show AppBadLhsError = "AppBadLhsError"
+  show AppNameNotFoundError = "AppNameNotFoundError"
 
 public export
 ||| Fetch error location if possible
