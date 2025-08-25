@@ -1,16 +1,16 @@
 module Language.Reflection.Unification3.Context.Main
 
-import Control.Monad.Error.Either
-import Control.Monad.Error.Interface
-import Control.Monad.State
+import public Control.Monad.Error.Either
+import public Control.Monad.Error.Interface
+import public Control.Monad.State
 
-import Language.Reflection
-import Language.Reflection.TT
-import Language.Reflection.Unification3.IR
-import Language.Reflection.Unification3.Error
+import public Language.Reflection
+import public Language.Reflection.TT
+import public Language.Reflection.Unification3.IR
+import public Language.Reflection.Unification3.Error
 
-import Data.Fin
-import Data.SortedMap
+import public Data.Fin
+import public Data.SortedMap
 
 %default total
 
@@ -65,6 +65,7 @@ namespace BoundNames
   public export
   Show (BoundNames bjn)
 
+  public export
   show_inner : BoundNames bjn -> String
   show_inner [<] = "[<"
   show_inner ([<] :< x) = "[< x"

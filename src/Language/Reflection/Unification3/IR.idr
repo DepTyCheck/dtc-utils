@@ -2,16 +2,16 @@
 ||| and operations on it that don't require a context.
 module Language.Reflection.Unification3.IR
 
-import Language.Reflection
-import Language.Reflection.TT
-import Language.Reflection.TTImp
+import public Language.Reflection
+import public Language.Reflection.TT
+import public Language.Reflection.TTImp
 
-import Data.Fin
-import Data.Nat
-import Data.Vect
-import Data.Vect.Views
+import public Data.Fin
+import public Data.Nat
+import public Data.Vect
+import public Data.Vect.Views
 
-import Data.Fin.ToFin
+import public Data.Fin.ToFin
 
 %default total
 
@@ -59,6 +59,7 @@ data IRTerm : (vs : Nat) -> (bjn : Nat) -> Type where
 public export
 Eq (IRTerm vs bjn)
 
+public export
 pinfoEq : PiInfo (IRTerm vs bjn) -> PiInfo (IRTerm vs bjn) -> Bool
 pinfoEq ImplicitArg ImplicitArg = True
 pinfoEq ExplicitArg ExplicitArg = True
@@ -85,6 +86,7 @@ Eq (IRTerm vs bjn) where
   (==) (IRPrim c) (IRPrim c') = c == c'
   (==) _ _ = False
 
+public export
 Show Count where
   show M0 = "0 "
   show M1 = "1 "
@@ -162,6 +164,7 @@ raise' : (i : Nat) -> IRTerm vs bjn -> IRTerm vs (i + bjn)
 raise' i term = rewrite plusCommutative i bjn in raise i term
 
 -- TODO: document this!
+public export
 newJ : (i : Fin (S bjn)) -> 
        (j : Fin (S bjn)) -> 
        (i == j) = False -> 
@@ -202,6 +205,7 @@ subst' new i (IRLet rig nm nTy nVal inner) =
                (subst' (raise' 1 new) (shift 1 i) inner)
 subst' new i (IRPrim c) = IRPrim c
 
+public export
 helpPi : (a -> Bool) -> PiInfo a -> Bool
 helpPi f (DefImplicit x) = f x
 helpPi f _ = False

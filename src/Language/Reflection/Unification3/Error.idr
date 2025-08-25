@@ -1,12 +1,12 @@
 module Language.Reflection.Unification3.Error
 
-import Language.Reflection.Unification3.IR
+import public Language.Reflection.Unification3.IR
 
-import Control.Monad.Error.Interface
+import public Control.Monad.Error.Interface
 
-import Language.Reflection
-import Language.Reflection.TT
-import Language.Reflection.TTImp
+import public Language.Reflection
+import public Language.Reflection.TT
+import public Language.Reflection.TTImp
 
 %default total
 

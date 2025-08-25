@@ -1,21 +1,22 @@
 module Language.Reflection.Unification3.Convert
 
-import Data.Maybe
-import Data.Fin
+import public Data.Maybe
+import public Data.Fin
 
-import Control.Monad.Error.Interface
+import public Control.Monad.Error.Interface
 
-import Language.Reflection.Unification3.IR
-import Language.Reflection.Unification3.Context.Main
-import Language.Reflection.Unification3.Error
+import public Language.Reflection.Unification3.IR
+import public Language.Reflection.Unification3.Context.Main
+import public Language.Reflection.Unification3.Error
 
-import Language.Reflection
-import Language.Reflection.TT
-import Language.Reflection.TTImp
+import public Language.Reflection
+import public Language.Reflection.TT
+import public Language.Reflection.TTImp
 
 %default total
 
 ||| Throw an error st FC if Nothing, otherwise return name
+public export
 assertName : MonadError UnificationError m => FC -> Maybe Name -> m Name
 assertName fc Nothing  = throwError $ NoNameError fc
 assertName fc (Just n) = pure n
