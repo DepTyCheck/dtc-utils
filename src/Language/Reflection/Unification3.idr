@@ -400,40 +400,41 @@ acNext :
   MonadError UnificationError m =>
   GlobalVars ->
   AppBundle fvs bjn ->
-  m $ (IRTerm fvs bjn, IRTerm fvs bjn, IRTerm fvs (S bjn), AppChain fvs bjn)
+  m $ (IRTerm fvs bjn, AppChain fvs bjn)
 acNext gv (fv, bv, ac) = 
   case ac.lhs of
     (IRLam rig ImplicitArg nm x y) =>
       case lookup nm ac.nameds of
          Nothing => throwError AppNameNotFoundError
-         Just av => pure (av, x, y, {nameds $= delete nm} ac)
+         Just av => pure (av, {nameds $= delete nm} ac)
     (IRLam rig ExplicitArg nm x y) =>
       case ac.explicits of
         [] => case lookup nm ac.nameds of
           Nothing => throwError AppNameNotFoundError
-          Just av => pure (av, x, y, {nameds $= delete nm} ac)
-        (av :: xs) => pure (av, x, y, {explicits := xs} ac)
+          Just av => pure (av, {nameds $= delete nm} ac)
+        (av :: xs) => pure (av, {explicits := xs} ac)
     (IRLam rig AutoImplicit nm x y) => 
       case ac.autos of
         [] => case lookup nm ac.nameds of
           Nothing => throwError AppNameNotFoundError
-          Just av => pure (av, x, y, {nameds $= delete nm} ac)
-        (av :: xs) => pure (av, x, y, {autos := xs} ac)
+          Just av => pure (av, {nameds $= delete nm} ac)
+        (av :: xs) => pure (av, {autos := xs} ac)
     (IRLam rig (DefImplicit z) nm x y) =>
        case lookup nm ac.nameds of
-           Nothing => pure (z, x, y, ac)
-           Just av => pure (av, x, y, {nameds $= delete nm} ac)
+           Nothing => pure (z, ac)
+           Just av => pure (av, {nameds $= delete nm} ac)
     _ => throwError AppBadLhsError
 
 
 
 acReduce isLeft gv (fv, bv, ac) =
   if acEmpty ac then pure ac.lhs else case ac.lhs of
-    IRGlobalVar _ => pure ac.lhs
-    _ => do
-      (argVal, argTy, body, nextAC) <- acNext gv (fv, bv, ac)
+    IRGlobalVar _ => pure $ ?unAC ac
+    (IRLam rig pinof nm argTy body) => do
+      (argVal, nextAC) <- acNext gv (fv, bv, ac)
       typecheck {fvs'} isLeft gv (fv, bv, argVal) argTy
       assert_total $ acReduce {m} {fvs'} isLeft gv (fv, bv, {lhs := subst' argVal 0 body} nextAC)
+    _ => throwError AppBadLhsError
 
 public export
 reduceAppChain : Monad m =>
