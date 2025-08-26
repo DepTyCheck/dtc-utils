@@ -28,10 +28,9 @@ typeConverts : Property
 typeConverts = property1 $ do
   assertConvertsTo `(Type) [<] IRType
 
--- primConverts : Property
--- primConverts = property1 $ do
---   traverse_ (\x => assertConvertsTo (IPrimVal EmptyFC x) [<] (IRPrim x))
---     [I 10]
+primConverts : Property
+primConverts = property1 $ do
+  assertConvertsTo (IPrimVal EmptyFC (I 10)) [<] (IRPrim (I 10)) 
 
 fvConverts : Property
 fvConverts = property1 $ do
@@ -59,7 +58,7 @@ public export
 singleConversions : Group
 singleConversions = MkGroup "Conversion of minimal expressions" 
   [ ("IType -> IRType", typeConverts)
-  -- , ("IPrimVal -> IRPrim", primConverts)
+  , ("IPrimVal -> IRPrim", primConverts)
   , ("IVar -> IRFreeVar", fvConverts)
   , ("ILam -> IRLam", lambdaConverts)
   , ("ILet -> ILet", letConverts)
