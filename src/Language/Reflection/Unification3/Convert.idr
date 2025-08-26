@@ -55,7 +55,7 @@ convertToIR freeVars boundVars (IAutoApp fc s t) =
             <*> convertToIR freeVars boundVars t
 convertToIR freeVars boundVars (IPrimVal fc c) = pure $ IRPrim c
 convertToIR freeVars boundVars (IType fc) = pure $ IRType
-convertToIR freeVars boundVars term = throwError $ UnsupportedExprTypeError $ getFC term
+convertToIR freeVars boundVars term = throwError $ UnsupportedExprTypeError term
 
 public export
 convertFreeVars : MonadError UnificationError m => 

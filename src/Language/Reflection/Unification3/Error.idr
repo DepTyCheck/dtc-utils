@@ -14,7 +14,7 @@ import public Language.Reflection.TTImp
 public export
 data UnificationError =
   ||| Attempting to unify an usupported expression 
-  UnsupportedExprTypeError FC |
+  UnsupportedExprTypeError TTImp |
   ||| A global variable is ambiguous.
   AmbiguousGlobalVarError Name (List Name) |
   ||| Global variable not found
@@ -33,7 +33,7 @@ data UnificationError =
 
 public export
 Show UnificationError where
-  show (UnsupportedExprTypeError _) = "UnsupportedExprTypeError"
+  show (UnsupportedExprTypeError t) = "UnsupportedExprTypeError \{show t}"
   show (AmbiguousGlobalVarError n ns) = "AmbiguousGlobalVarError {\show n} {\show ns}"
   show (GlobalVarNotFound nm) = "GlobalVarNotFound \{show nm}"
   show (NoNameError _) = "NoNameError"
@@ -44,7 +44,7 @@ Show UnificationError where
 public export
 ||| Fetch error location if possible
 errFC : UnificationError -> Maybe FC
-errFC (UnsupportedExprTypeError fc) = Just fc
+errFC (UnsupportedExprTypeError tt) = Just $ getFC tt
 errFC (NoNameError fc) = Just fc
 errFC _ = Nothing
 
