@@ -70,6 +70,7 @@ mockGV' (nm :: nms) gv = do
   converted <- convertToIR [<] [<] ty
   insert nm (converted, i.nametype) <$> mockGV' nms gv
 
+%macro
 public export
 mockGV : List Name ->
          Elab GlobalVars

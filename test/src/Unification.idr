@@ -81,7 +81,7 @@ assertReducesTo gv freeVars from to = do
   res === to
 
 reducesTo : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> TTImp -> Property
-reducesTo {fvs} from to = property1 $ assertReducesTo (%runElab mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
+reducesTo {fvs} from to = property1 $ assertReducesTo (mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
 
 public export
 reductions : Group
