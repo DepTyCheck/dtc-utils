@@ -36,9 +36,11 @@ modules = Language.Reflection.VarSubst
         , Language.Reflection.Unification3.Solver
         , Language.Reflection.Unification3.Solver.Constraints
         , Language.Reflection.Unification3.IR
+        , Language.Reflection.Unification3.IR.AppChain
         , Language.Reflection.Unification3.Error
+        , Language.Reflection.Unification3.Log
         , Language.Reflection.Monomorphisation2
-        , Language.Reflection.Logging
+        -- , Language.Reflection.Logging
         , Data.FinBitSet
 
 depends = contrib, elab-util, elab-pretty, prettier, elab-util-extra, i-hate-parens, mtl-tuple-impls, lens, fin-lizzie

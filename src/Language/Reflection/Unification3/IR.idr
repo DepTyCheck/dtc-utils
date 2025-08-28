@@ -98,13 +98,13 @@ Show (IRTerm vs bjn) where
   show (IRLocalVar x) = "_\{show x}"
   show (IRGlobalVar nm) = show nm
   show IRType = "Type"
-  show (IRApp x y) = "\{show x} \{show y}"
-  show (IRAutoApp x y) = "\{show x} @{\{show y}}"
-  show (IRNamedApp x nm y) = "\{show x} {\{show nm}=\{show y}}"
+  show (IRApp x y) = "(\{show x}) (\{show y})"
+  show (IRAutoApp x y) = "(\{show x}) @{\{show y}}"
+  show (IRNamedApp x nm y) = "(\{show x}) {\{show nm}=\{show y}}"
   show (IRLam count pinfo nm x y) = "(\\ \{show count}\{show nm} : \{show x} => \{show y})"
   show (IRPi count pinfo nm x y) = "(\{show count}\{show nm} : \{show x}) -> \{show y}"
   show (IRLet count nm x y z) = 
-    "let \{show count}\{show nm} : \{show x} = \{show y} in \{show z}"
+    "let \{show count}\{show nm} : (\{show x}) = \{show y} in \{show z}"
   show (IRPrim c) = show c
 
 ||| Raise the amount of free variables in a term by one

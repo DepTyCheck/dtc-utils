@@ -3,7 +3,9 @@ module Language.Reflection.Unification3
 import public Language.Reflection.Unification3.Context
 import public Language.Reflection.Unification3.Error
 import public Language.Reflection.Unification3.IR
+import public Language.Reflection.Unification3.IR.AppChain
 import public Language.Reflection.Unification3.Solver
+import public Language.Reflection.Unification3.Log
 
 import public Control.Monad.Error.Either
 import public Control.Monad.Error.Interface
@@ -19,57 +21,20 @@ import public Data.Nat
 import public Data.Vect
 import public Data.SortedMap
 
-%default total
-
-||| A bundle of non-global context and a term
 public export
-%inline
-Bundle : Nat -> Nat -> Type
-Bundle fvs bjn = (FreeVars fvs, BoundVars fvs bjn, IRTerm fvs bjn)
+record Bounds where
+  constructor MKBounds
+  fvsL : Nat
+  fvsR : Nat
 
 public export
 %inline
-HelpLR : (Nat -> t) -> (isLeft : Bool) -> (fvsL : Nat) -> (fvsR : Nat) -> t
-HelpLR f isLeft fvsL fvsR =
-  if isLeft then f fvsL else f fvsR
-
-public export
-%inline
-IRTerm' : Bool -> Nat -> Nat -> Nat -> Type
-IRTerm' True  fvsL fvsR = IRTerm fvsL
-IRTerm' False fvsL fvsR = IRTerm fvsR
-
-public export
-%inline
-Bundle' : Bool -> Nat -> Nat -> Nat -> Type
-Bundle' True  fvsL fvsR = Bundle fvsL
-Bundle' False fvsL fvsR = Bundle fvsR
-
-public export
-%inline
-Constraints' : Bool -> Nat -> Nat ->Type
-Constraints' True fvs fvs' = Constraints fvs fvs'
-Constraints' False fvs fvs' = Constraints fvs' fvs
-
-public export
-record AppChain (fvs : Nat) (bjn : Nat)
-
-public export
-mkAC : IRTerm fvs bjn -> AppChain fvs bjn
-
-%inline
-public export
-AppBundle' : Bool -> Nat -> Nat -> Nat -> Type
-AppBundle' True fvsL fvsR bjn = (FreeVars fvsL, BoundVars fvsL bjn, AppChain fvsL bjn)
-AppBundle' False fvsL fvsR bjn = (FreeVars fvsR, BoundVars fvsR bjn, AppChain fvsR bjn)
-
-%inline
-public export
-AppBundle : Nat -> Nat -> Type
-AppBundle fvs bjn = (FreeVars fvs, BoundVars fvs bjn, AppChain fvs bjn)
-
-public export
-{b : Bool} -> Monad m => (ms1 : MonadState s1 m) => (ms2: MonadState s2 m) => MonadState (if b then s1 else s2) m where
+{b : Bool} -> 
+{bds : Bounds} ->
+Monad m => 
+(ms1 : MonadState (Constraints bds.fvsL bds.fvsR) m) => 
+(ms2 : MonadState (Constraints bds.fvsR bds.fvsL) m) => 
+MonadState (Constraints (if b then bds.fvsL else bds.fvsR) (if b then bds.fvsR else bds.fvsL)) m where
   get {b = True} = get @{ms1}
   get {b = False} = get @{ms2}
   put {b = True} = put @{ms1}
@@ -77,76 +42,44 @@ public export
   state {b = True} = state @{ms1}
   state {b = False} = state @{ms2}
 
+parameters 
+  (isTrue : Bool)
+  (b : Bounds)
 
-||| Tries to reduce a bundle
-|||
-||| Errors if functions are applied with incorrect arguments (TODO explain further)
-||| or if typechecking fails
-public export
-reduce : Monad m =>
-         MonadError UnificationError m => 
-         MonadState (Constraints fvsL fvsR) m =>
-         {bjn : Nat} ->
-         GlobalVars ->
-         (isLeft : Bool) ->
-         Bundle' isLeft fvsL fvsR bjn ->
-         m $ IRTerm' isLeft fvsL fvsR bjn
+  %inline
+  public export
+  thisFvs : Nat
+  thisFvs = if isTrue then b.fvsL else b.fvsR
 
-||| Given the context of free and bound variables, determine the type of an expression
-||| If contains type of expression 
-public export
-typeof : Monad m =>
-         MonadError UnificationError m => 
-         MonadState (Constraints fvsL fvsR) m =>
-         {bjn : Nat} -> 
-         GlobalVars -> 
-         (isLeft : Bool) ->
-         Bundle' isLeft fvsL fvsR bjn ->
-         m $ IRTerm' isLeft fvsL fvsR bjn
+  %inline
+  public export
+  otherFvs : Nat
+  otherFvs = if isTrue then b.fvsR else b.fvsL
 
-||| Register that the two expressions must be equal
-public export
-unify : Monad m =>
-        MonadError UnificationError m =>
-        MonadState (Constraints fvsL fvsR) m =>
-        GlobalVars ->
-        (isLeft : Bool) -> 
-        Bundle' isLeft fvsL fvsR bjn ->
-        (isLeft' : Bool) ->
-        Bundle' isLeft' fvsL fvsR bjn' ->
-        m $ ()
+  %inline
+  public export
+  term : Nat -> Type
+  term = IRTerm thisFvs
 
-public export
-typeofAppChain : Monad m =>
-                 MonadError UnificationError m =>
-                 MonadState (Constraints fvsL fvsR) m => 
-                 GlobalVars ->
-                 {bjn : Nat} ->
-                 (isLeft : Bool) ->
-                 AppBundle' isLeft fvsL fvsR bjn ->
-                 m $ IRTerm' isLeft fvsL fvsR bjn
+  %inline
+  public export
+  fvsT : Type
+  fvsT = FreeVars thisFvs
 
-public export
-typeofAppChain' : 
-  Monad m =>
-  MonadError UnificationError m =>
-  {bjn : Nat} ->
-  (isLeft : Bool) ->
-  MonadState (Constraints' isLeft fvs fvs') m =>
-  GlobalVars ->
-  AppBundle fvs bjn ->
-  m $ IRTerm fvs bjn
+  %inline
+  public export
+  bvsT : Nat -> Type
+  bvsT = BoundVars thisFvs
 
-public export
-acReduce : 
-  Monad m =>
-  MonadError UnificationError m =>
-  {bjn : Nat} ->
-  (isLeft : Bool) ->
-  MonadState (Constraints' isLeft fvs fvs') m =>
-  GlobalVars ->
-  AppBundle fvs bjn ->
-  m $ IRTerm fvs bjn
+  %inline
+  public export
+  constraints : Type
+  constraints = Constraints b.fvsL b.fvsR
+
+  %inline
+  public export
+  appChain : Nat -> Type
+  appChain = AppChain thisFvs
 
 public export
 typeofConst : Constant -> IRTerm fvs bjn
@@ -166,287 +99,131 @@ typeofConst (Db dbl) = IRGlobalVar "Double"
 typeofConst (PrT pty) = IRGlobalVar "PrimType"
 typeofConst WorldVal = IRType
 
-public export
-typeof' : Monad m =>
-          MonadError UnificationError m =>
-          {bjn : Nat} ->
+parameters 
+  {auto _ : Monad m}
+  {auto _ : MonadError UnificationError m}
+  {auto _ : MonadLog m}
+  (gv : GlobalVars)
+  {bds : Bounds}
+
+  public export
+  unify : MonadState (Constraints bds.fvsL bds.fvsR) m =>
           (isLeft : Bool) ->
-          MonadState (Constraints' isLeft fvs fvs') m =>
-          GlobalVars ->
-          Bundle fvs bjn ->
-          m $ IRTerm fvs bjn
-typeof' isLeft gv (fv, bv, (IRFreeVar x)) = 
-  pure $ raise bjn $ snd $ index x fv
-typeof' isLeft gv (fv, bv, (IRLocalVar x)) = 
-  pure $ snd $ index x bv
-typeof' isLeft gv (fv, bv, (IRGlobalVar nm)) =
-  case lookup nm gv of
-    Just (t, _) => pure $ setFV $ raise bjn t
-    Nothing => throwError $ GlobalVarNotFound nm
-typeof' isLeft gv (fv, bv, IRType) = pure IRType
-typeof' isLeft gv (fv, bv, a@(IRApp x y)) = 
-  assert_total $ typeofAppChain' {fvs'} isLeft gv (fv, bv, mkAC a)
-typeof' isLeft gv (fv, bv, a@(IRAutoApp x y)) = 
-  assert_total $ typeofAppChain' {fvs'} isLeft gv (fv, bv, mkAC a)
-typeof' isLeft gv (fv, bv, a@(IRNamedApp x nm y)) = 
-  assert_total $ typeofAppChain' {fvs'} isLeft gv (fv, bv, mkAC a)
-typeof' isLeft gv (fv, bv, (IRPi rig pinfo nm x y)) = pure IRType
-typeof' isLeft gv (fv, bv, (IRPrim c)) = pure $ typeofConst c
-typeof' isLeft gv (fv, bv, (IRLam rig pinfo nm x y)) with 
-  (IRPi rig pinfo nm x <$>
-    assert_total (typeof' {m} {fvs'} isLeft gv (fv, bv :< (nm, x), y)))
-  typeof' True _ (_, _, (IRLam _ _ _ _ _)) | res = res
-  typeof' False _ (_, _, (IRLam _ _ _ _ _)) | res = res
+          (fv : fvsT isLeft bds) ->
+          (bv : bvsT isLeft bds bjn) ->
+          (t : term isLeft bds bjn) ->
+          (isLeft' : Bool) ->
+          (fv' : fvsT isLeft' bds) ->
+          (bv : bvsT isLeft' bds bjn) ->
+          (t' : term isLeft' bds bjn) ->
+          m ()
 
-typeof' isLeft gv (fv, bv, (IRLet rig nm type val body)) with 
-  (do
-    valT <- typeof' {m} {fvs'} isLeft gv (fv, bv, val)
-    if isLeft
-       then unify gv True (fv, bv, valT) True (fv, bv, type)
-       else unify gv False (fv, bv, valT) False (fv, bv, type)
-    assert_total (typeof' {m} {fvs'} isLeft gv (fv, bv, subst' val 0 body)))
-  typeof' True _ (_, _, IRLet _ _ _ _ _) | res = res
-  typeof' False _ (_, _, IRLet _ _ _ _ _) | res = res
+  parameters 
+    (isLeft : Bool)
+    {auto st : MonadState (constraints isLeft bds) m}
+    (fv : fvsT isLeft bds)
+    parameters
+      {bjn : Nat}
+      (bv : bvsT isLeft bds bjn)
 
-typeof gv False b = typeof' {m} False gv b
-typeof gv True b = typeof' {m} True gv b
+      public export
+      typeof : term isLeft bds bjn -> m $ term isLeft bds bjn
 
-public export
-reduce' : Monad m =>
-          MonadError UnificationError m =>
-          {bjn : Nat} ->
-          (isLeft : Bool) ->
-          MonadState (Constraints' isLeft fvs fvs') m =>
-          GlobalVars ->
-          Bundle fvs bjn ->
-          m $ IRTerm fvs bjn
-reduce' isLeft gv (fv, bv, (IRFreeVar x)) = pure $ IRFreeVar x
-reduce' isLeft gv (fv, bv, (IRLocalVar x)) = pure $ IRLocalVar x
-reduce' isLeft gv (fv, bv, (IRGlobalVar nm)) = pure $ IRGlobalVar nm
-reduce' isLeft gv (fv, bv, IRType) = pure $ IRType
-reduce' isLeft gv (fv, bv, a@(IRApp x y)) = acReduce {fvs'} isLeft gv (fv, bv, mkAC a)
-reduce' isLeft gv (fv, bv, a@(IRAutoApp x y)) = acReduce {fvs'} isLeft gv (fv, bv, mkAC a)
-reduce' isLeft gv (fv, bv, a@(IRNamedApp x nm y)) = acReduce {fvs'} isLeft gv (fv, bv, mkAC a)
-reduce' isLeft gv (fv, bv, (IRPrim c)) = pure $ IRPrim c
-reduce' isLeft gv (fv, bv, (IRLet rig nm type val body)) = 
-  pure $ subst' val 0 body
-reduce' isLeft gv (fv, bv, (IRLam rig pinfo nm x y)) with (
-  IRLam rig 
-    <$> traverse (\n => assert_total (reduce' {fvs'} isLeft gv (fv, bv, n))) pinfo
-    <*> pure nm
-    <*> reduce' {m} {fvs'} isLeft gv (fv, bv, x)
-    <*> assert_total (reduce' {fvs'} isLeft gv (fv, bv :< (nm, x), y)))
-  reduce' True gv (fv, bv, (IRLam rig pinfo nm x y)) | res = res
-  reduce' False gv (fv, bv, (IRLam rig pinfo nm x y)) | res = res
-reduce' isLeft gv (fv, bv, (IRPi rig pinfo nm x y)) with (
-  IRPi rig 
-    <$> traverse (\n => assert_total (reduce' {fvs'} isLeft gv (fv, bv, n))) pinfo
-    <*> pure nm
-    <*> reduce' {m} {fvs'} isLeft gv (fv, bv, x)
-    <*> assert_total (reduce' {fvs'} isLeft gv (fv, bv :< (nm, x), y)))
-  reduce' True gv (fv, bv, (IRPi rig pinfo nm x y)) | res = res
-  reduce' False gv (fv, bv, (IRPi rig pinfo nm x y)) | res = res
+      public export
+      typeofAppChain : appChain isLeft bds bjn -> m $ term isLeft bds bjn
 
-reduce gv False b = reduce' {m} False gv b
-reduce gv True b = reduce' {m} True gv b
+      public export
+      reduce : term isLeft bds bjn -> m $ term isLeft bds bjn
 
-public export
-data IRAppType = IRExplicit | IRAutoImplicit | IRNamed Name
+      public export
+      reduceAppChain : appChain isLeft bds bjn -> m $ term isLeft bds bjn 
 
-public export
-record IRAppArg (fvs : Nat) (bjn : Nat) where
-  constructor MkAA
-  argTy : IRAppType
-  arg : IRTerm fvs bjn
+      public export
+      typecheck : term isLeft bds bjn -> term isLeft bds bjn -> m ()
+      typecheck val type = do
+        valT <- typeof val
+        unify isLeft fv bv valT isLeft fv bv type
+    
+    typeof bv t = do
+      logStr 10 "typeof \{show isLeft} \{show t}"
+      case t of
+        (IRFreeVar x) => pure $ raise bjn $ snd $ index x fv
+        (IRLocalVar x) => pure $ snd $ index x bv
+        (IRGlobalVar nm) =>
+          case lookup nm gv of
+            Just (t, _) => pure $ setFV $ raise bjn t
+            Nothing => throwError $ GlobalVarNotFound nm
+        IRType => pure IRType
+        t@(IRApp x y) => typeofAppChain isLeft fv bv $ mkAC t
+        t@(IRAutoApp x y) => typeofAppChain isLeft fv bv $ mkAC t
+        t@(IRNamedApp x nm y) => typeofAppChain isLeft fv bv $ mkAC t
+        (IRLam rig pinfo nm x y) =>
+          IRPi rig pinfo nm x <$> typeof isLeft fv (bv :< (nm, x)) y
+        (IRPi rig pinfo nm x y) => pure IRType
+        (IRLet rig nm type val body) => do
+          valT <- typeof isLeft fv bv val
+          unify isLeft fv bv valT isLeft fv bv type
+          typeof isLeft fv bv $ subst' val 0 body
+        (IRPrim c) => pure $ typeofConst c
 
-public export
-appArg : IRTerm fvs bjn -> IRAppArg fvs bjn -> IRTerm fvs bjn
-appArg l (MkAA IRExplicit arg) = IRApp l arg
-appArg l (MkAA IRAutoImplicit arg) = IRAutoApp l arg
-appArg l (MkAA (IRNamed nm) arg) = IRNamedApp l nm arg
+    reduce bv t = do
+      logStr 10 "reduce \{show isLeft} \{show t}"
+      case t of
+        (IRFreeVar x) => pure $ IRFreeVar x
+        (IRLocalVar x) => pure $ IRLocalVar x
+        (IRGlobalVar nm) => pure $ IRGlobalVar nm
+        IRType => pure $ IRType
+        t@(IRApp x y) => reduceAppChain isLeft fv bv $ mkAC t
+        t@(IRAutoApp x y) => reduceAppChain isLeft fv bv $ mkAC t
+        t@(IRNamedApp x nm y) => reduceAppChain isLeft fv bv $ mkAC t
+        (IRLam rig pinfo nm x y) => do
+          IRLam rig
+            <$> traverse (\n => reduce isLeft fv bv n) pinfo
+            <*> pure nm
+            <*> reduce isLeft fv bv x
+            <*> reduce isLeft fv (bv :< (nm, x)) y 
+        (IRPi rig pinfo nm x y) => do
+          IRPi rig
+            <$> traverse (\n => reduce isLeft fv bv n) pinfo
+            <*> pure nm
+            <*> reduce isLeft fv bv x
+            <*> reduce isLeft fv (bv :< (nm, x)) y 
+        (IRLet rig nm type val body) => do
+          typecheck isLeft fv bv val type
+          reduce isLeft fv bv $ subst' val 0 body
+        (IRPrim c) => pure $ IRPrim c
 
-public export
-peelAppTelescope : IRTerm fvs bjn -> (IRTerm fvs bjn, List $ IRAppArg fvs bjn)
-peelAppTelescope t = go t []
-  where
-  go : IRTerm fvs bjn -> 
-       List (IRAppArg fvs bjn) -> 
-       (IRTerm fvs bjn, List $ IRAppArg fvs bjn)
-  go (IRApp l r) rest = go l $ MkAA IRExplicit r :: rest
-  go (IRAutoApp l r) rest = go l $ MkAA IRAutoImplicit r :: rest
-  go (IRNamedApp l nm r) rest = go l $ MkAA (IRNamed nm) r :: rest
-  go t rest = (t, rest)
+    typeofAppChain bv ac = do
+      logStr 10 "typeofAppChain \{show isLeft} lhs=\{show ac.lhs} args=\{show $ ac.args} nameds = \{show $ ac.nameds}"
+      -- lhs' <- reduce bv ac.lhs
+      -- let ac = {lhs := lhs'} ac
+      if ac.argCount == 0 
+         then typeof isLeft fv bv ac.lhs 
+         else case ac.lhs of
+          (IRLam rig pinfo nm ty body) => do
+            let Just (arg, ac) = nextArg pinfo nm ac
+            | Nothing => throwError $ AppNameNotFoundError nm
+            typecheck isLeft fv bv arg ty
+            typeofAppChain isLeft fv bv $ {lhs := subst' arg 0 body} ac
+          (IRGlobalVar _) => do
+            typeof_lhs <- typeof bv ac.lhs
+            pure $ unAC $ {lhs := typeof_lhs} ac
+          _ => throwError AppBadLhsError
 
-public export
-applyAppTelescope : IRTerm fvs bjn -> List (IRAppArg fvs bjn) -> IRTerm fvs bjn
-applyAppTelescope = foldl appArg
+    reduceAppChain bv ac = do
+      logStr 10 "reduceAppChain \{show isLeft} lhs=\{show ac.lhs} args=\{show $ ac.args}  nameds = \{show $ ac.nameds}"
+      -- lhs' <- reduce bv ac.lhs
+      -- let ac = {lhs := lhs'} ac
+      if ac.argCount == 0
+        then reduce isLeft fv bv ac.lhs
+        else case ac.lhs of
+          (IRLam rig pinfo nm ty body) => do
+            let Just (arg, ac) = nextArg pinfo nm ac
+            | Nothing => throwError $ AppNameNotFoundError nm
+            typecheck isLeft fv bv arg ty
+            reduceAppChain isLeft fv bv $ {lhs := subst' arg 0 body} ac
+          (IRGlobalVar _) => pure $ unAC ac
+          _ => throwError AppBadLhsError
 
-public export
-record AppChain' (fvs : Nat) (bjn : Nat) where
-  constructor MkAppChain'
-  lhs : IRTerm fvs bjn
-  explicits : SnocList (IRTerm fvs bjn)
-  autos : SnocList (IRTerm fvs bjn)
-  nameds : SortedMap Name $ IRTerm fvs bjn
-
-public export
-addAppArg : IRAppArg fvs bjn -> AppChain' fvs bjn -> AppChain' fvs bjn
-addAppArg (MkAA IRExplicit arg) = {explicits $= (:< arg)}
-addAppArg (MkAA IRAutoImplicit arg) = {autos $= (:< arg)}
-addAppArg (MkAA (IRNamed nm) arg) = {nameds $= insert nm arg}
-
-public export
-record AppChain (fvs : Nat) (bjn : Nat) where
-  constructor MkAppChain
-  lhs : IRTerm fvs bjn
-  explicits : List (IRTerm fvs bjn)
-  autos : List (IRTerm fvs bjn)
-  nameds : SortedMap Name $ IRTerm fvs bjn
-
-public export
-toAC : AppChain' fvs bjn -> AppChain fvs bjn
-toAC (MkAppChain' lhs explicits autos nameds) = 
-  MkAppChain lhs (toList explicits) (toList autos) nameds
-
-mkAC t = do
-  let (lhs, args) = peelAppTelescope t
-  let ac' = foldl (flip addAppArg) (MkAppChain' lhs [<] [<] empty) args
-  toAC ac'
-
-public export
-acEmpty : AppChain fv bjn -> Bool
-acEmpty (MkAppChain lhs [] [] nameds) = nameds == empty
-acEmpty (MkAppChain lhs _ _ nameds) = False
-
-public export
-typecheck :
-  Monad m =>
-  MonadError UnificationError m =>
-  {bjn : Nat} ->
-  (isLeft : Bool) ->
-  MonadState (Constraints' isLeft fvs fvs') m =>
-  GlobalVars ->
-  (var : Bundle fvs bjn) ->
-  (ty : IRTerm fvs bjn) ->
-  m ()
-typecheck False gv b@(fv, bv, val) ty = do
-  ty <- typeof' {m} False gv b
-  unify gv False b False (fv, bv, ty)
-typecheck True gv b@(fv, bv, val) ty = do
-  ty <- typeof' {m} True gv b
-  unify gv True b True (fv, bv, ty)
-
-public export
-acSigNext : 
-  Monad m =>
-  MonadError UnificationError m =>
-  GlobalVars ->
-  IRTerm fvs bjn ->
-  AppBundle fvs bjn ->
-  m $ (IRTerm fvs bjn, IRTerm fvs bjn, IRTerm fvs (S bjn), AppChain fvs bjn)
-acSigNext gv lhsSig (fv, bv, ac) = 
-  case lhsSig of
-    (IRPi rig ImplicitArg nm x y) =>
-      case lookup nm ac.nameds of
-         Nothing => throwError AppNameNotFoundError
-         Just av => pure (av, x, y, {nameds $= delete nm} ac)
-    (IRPi rig ExplicitArg nm x y) =>
-      case ac.explicits of
-        [] => case lookup nm ac.nameds of
-          Nothing => throwError AppNameNotFoundError
-          Just av => pure (av, x, y, {nameds $= delete nm} ac)
-        (av :: xs) => pure (av, x, y, {explicits := xs} ac)
-    (IRPi rig AutoImplicit nm x y) => 
-      case ac.autos of
-        [] => case lookup nm ac.nameds of
-          Nothing => throwError AppNameNotFoundError
-          Just av => pure (av, x, y, {nameds $= delete nm} ac)
-        (av :: xs) => pure (av, x, y, {autos := xs} ac)
-    (IRPi rig (DefImplicit z) nm x y) =>
-       case lookup nm ac.nameds of
-           Nothing => pure (z, x, y, ac)
-           Just av => pure (av, x, y, {nameds $= delete nm} ac)
-    _ => throwError AppBadLhsError
-
-public export
-acSigReduce : 
-  Monad m =>
-  MonadError UnificationError m =>
-  {bjn : Nat} ->
-  (isLeft : Bool) ->
-  MonadState (Constraints' isLeft fvs fvs') m =>
-  GlobalVars ->
-  IRTerm fvs bjn ->
-  AppBundle fvs bjn ->
-  m $ IRTerm fvs bjn
-acSigReduce isLeft gv lhsSig (fv, bv, ac) = 
-  if acEmpty ac then pure lhsSig else do
-    (argVal, argTy, body, nextAC) <- acSigNext gv lhsSig (fv, bv, ac)
-    typecheck {fvs'} isLeft gv (fv, bv, argVal) argTy
-    assert_total $ acSigReduce {m} {fvs'} isLeft gv (subst' argVal 0 body) (fv, bv, nextAC)
-  
-typeofAppChain' isLeft gv (fv, bv, chain) = do
-  sig <- typeof' {m} {fvs'} isLeft gv (fv, bv, chain.lhs)
-  acSigReduce {m} {fvs'} isLeft gv sig (fv, bv, chain)
-
-typeofAppChain gv False b = typeofAppChain' False gv b
-typeofAppChain gv True b = typeofAppChain' True gv b
-
-
-
-public export
-acNext : 
-  Monad m =>
-  MonadError UnificationError m =>
-  GlobalVars ->
-  AppBundle fvs bjn ->
-  m $ (IRTerm fvs bjn, AppChain fvs bjn)
-acNext gv (fv, bv, ac) = 
-  case ac.lhs of
-    (IRLam rig ImplicitArg nm x y) =>
-      case lookup nm ac.nameds of
-         Nothing => throwError AppNameNotFoundError
-         Just av => pure (av, {nameds $= delete nm} ac)
-    (IRLam rig ExplicitArg nm x y) =>
-      case ac.explicits of
-        [] => case lookup nm ac.nameds of
-          Nothing => throwError AppNameNotFoundError
-          Just av => pure (av, {nameds $= delete nm} ac)
-        (av :: xs) => pure (av, {explicits := xs} ac)
-    (IRLam rig AutoImplicit nm x y) => 
-      case ac.autos of
-        [] => case lookup nm ac.nameds of
-          Nothing => throwError AppNameNotFoundError
-          Just av => pure (av, {nameds $= delete nm} ac)
-        (av :: xs) => pure (av, {autos := xs} ac)
-    (IRLam rig (DefImplicit z) nm x y) =>
-       case lookup nm ac.nameds of
-           Nothing => pure (z, ac)
-           Just av => pure (av, {nameds $= delete nm} ac)
-    _ => throwError AppBadLhsError
-
-
-
-acReduce isLeft gv (fv, bv, ac) =
-  if acEmpty ac then pure ac.lhs else case ac.lhs of
-    IRGlobalVar _ => pure $ ?unAC ac
-    (IRLam rig pinof nm argTy body) => do
-      (argVal, nextAC) <- acNext gv (fv, bv, ac)
-      typecheck {fvs'} isLeft gv (fv, bv, argVal) argTy
-      assert_total $ acReduce {m} {fvs'} isLeft gv (fv, bv, {lhs := subst' argVal 0 body} nextAC)
-    _ => throwError AppBadLhsError
-
-public export
-reduceAppChain : Monad m =>
-                 MonadError UnificationError m =>
-                 MonadState (Constraints fvsL fvsR) m => 
-                 GlobalVars ->
-                 {bjn : Nat} ->
-                 (isLeft : Bool) ->
-                 AppBundle' isLeft fvsL fvsR bjn ->
-                 m $ IRTerm' isLeft fvsL fvsR bjn
-reduceAppChain gv False b = acReduce False gv b
-reduceAppChain gv True b = acReduce True gv b
-
-
-unify x isLeft y isLeft' z = pure ()
+  -- TODO: Impl unify
+  unify isLeft fv bv t isLeft' fv' x t' = pure ()

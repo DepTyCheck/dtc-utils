@@ -29,7 +29,7 @@ data UnificationError =
   ||| Left-hand side of a function application expression is not a function
   AppBadLhsError | 
   ||| Didn't find an appropriately named argument value during reduction
-  AppNameNotFoundError
+  AppNameNotFoundError Name
 
 public export
 Show UnificationError where
@@ -39,7 +39,7 @@ Show UnificationError where
   show (NoNameError _) = "NoNameError"
   show AppReductionError = "AppReductionError"
   show AppBadLhsError = "AppBadLhsError"
-  show AppNameNotFoundError = "AppNameNotFoundError"
+  show (AppNameNotFoundError nm) = "AppNameNotFoundError \{show nm}"
 
 public export
 ||| Fetch error location if possible

@@ -10,6 +10,8 @@ import public Data.SortedMap.Dependent
 import public Control.Monad.Either
 import public Control.Monad.Error.Either
 import public Control.Monad.Error.Interface
+import public Control.Monad.Writer
+import public Control.Monad.Identity
 
 import public Hedgehog
 
@@ -65,17 +67,28 @@ singleConversions = MkGroup "Conversion of minimal expressions"
   , ("ILet shadowing free variables", letShadows)
   ]
 
+artInner : GlobalVars -> SnocList (Name, TTImp) -> TTImp -> TTImp -> EitherT UnificationError (WriterT (List String) Identity) TTImp
+artInner gv freeVars from to = do
+  fv <- convertFreeVars freeVars
+  from' <- convertToIR fv [<] from
+  let cb = baseConstraints (length freeVars) 0
+  evalStateT cb $ do
+    reduced <- 
+      reduce @{%search} @{%search} @{logWriter} {bds = MKBounds (length freeVars) 0} gv True fv BoundVars.Lin from'
+
+    logStr @{logWriter} 0 "result = \{show reduced}"
+
+    pure $ convertFromIR fv [<] reduced
 
 -- Reduction
 assertReducesTo : Monad m => GlobalVars -> SnocList (Name, TTImp) -> TTImp -> TTImp -> TestT m ()
 assertReducesTo gv freeVars from to = do
-  res <- evalEither {x=UnificationError} $ do
-    fvs <- convertFreeVars freeVars
-    from' <- convertToIR fvs [<] from
-    let cb = baseConstraints (length freeVars) 0
-    evalStateT {m=Either UnificationError} cb $ do
-      reduced <- reduce gv True (fvs, BoundVars.Lin, from')
-      pure $ convertFromIR fvs [<] reduced
+  let (res, logs) = runIdentity $ runWriterT $ runEitherT $ artInner gv freeVars from to
+
+  footnote $ joinBy "\n" logs
+  -- traverse_ (\x => footnote x) logs
+
+  res <- evalEither res
 
   res === to
 
@@ -95,4 +108,6 @@ reductions = MkGroup "IR Reduction tests"
   , ("(\\x,y=>x+y) {x=1} {y=2} -> 1 + 2", `((\x: Nat, y: Nat => x+y) {x=S Z} {y=Z}) `reducesTo` `((S Z) + Z))
   , ("(\\x,y=>x+y) {y=2} {x=1} -> 1 + 2", `((\x: Nat, y: Nat => x+y) {y=Z} {x=S Z}) `reducesTo` `((S Z) + Z))
   , ("let x=Z in S x -> S Z", `(let x : Nat = Z in S x) `reducesTo` `(S Z))
+  , ( "higher order functions 1"
+    , `((\x : ((x : Nat) -> Nat), y: Nat => x y) (\x : Nat => S (S x)) Z) `reducesTo` `(S (S Z)))
   ]
