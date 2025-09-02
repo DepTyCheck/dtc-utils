@@ -147,9 +147,9 @@ parameters
     typeof bv t = do
       logStr 10 "typeof \{show isLeft} \{show t}"
       case t of
-        (IRFreeVar x) => pure $ raise bjn $ snd $ index x fv
-        (IRLocalVar x) => pure $ snd $ index x bv
-        (IRGlobalVar nm) =>
+        IRFreeVar x => pure $ raise bjn $ snd $ index x fv
+        IRLocalVar x => pure $ snd $ index x bv
+        IRGlobalVar nm =>
           case lookup nm gv of
             Just (t, _) => pure $ setFV $ raise bjn t
             Nothing => throwError $ GlobalVarNotFound nm
@@ -157,41 +157,41 @@ parameters
         t@(IRApp x y) => typeofAppChain isLeft fv bv $ mkAC t
         t@(IRAutoApp x y) => typeofAppChain isLeft fv bv $ mkAC t
         t@(IRNamedApp x nm y) => typeofAppChain isLeft fv bv $ mkAC t
-        (IRLam rig pinfo nm x y) =>
+        IRLam rig pinfo nm x y =>
           IRPi rig pinfo nm x <$> typeof isLeft fv (bv :< (nm, x)) y
-        (IRPi rig pinfo nm x y) => pure IRType
-        (IRLet rig nm type val body) => do
+        IRPi rig pinfo nm x y => pure IRType
+        IRLet rig nm type val body => do
           valT <- typeof isLeft fv bv val
           unify isLeft fv bv valT isLeft fv bv type
           typeof isLeft fv bv $ subst' val 0 body
-        (IRPrim c) => pure $ typeofConst c
+        IRPrim c => pure $ typeofConst c
 
     reduce bv t = do
       logStr 10 "reduce \{show isLeft} \{show t}"
       case t of
-        (IRFreeVar x) => pure $ IRFreeVar x
-        (IRLocalVar x) => pure $ IRLocalVar x
-        (IRGlobalVar nm) => pure $ IRGlobalVar nm
+        IRFreeVar x => pure $ IRFreeVar x
+        IRLocalVar x => pure $ IRLocalVar x
+        IRGlobalVar nm => pure $ IRGlobalVar nm
         IRType => pure $ IRType
         t@(IRApp x y) => reduceAppChain isLeft fv bv $ mkAC t
         t@(IRAutoApp x y) => reduceAppChain isLeft fv bv $ mkAC t
         t@(IRNamedApp x nm y) => reduceAppChain isLeft fv bv $ mkAC t
-        (IRLam rig pinfo nm x y) => do
+        IRLam rig pinfo nm x y => do
           IRLam rig
             <$> traverse (\n => reduce isLeft fv bv n) pinfo
             <*> pure nm
             <*> reduce isLeft fv bv x
             <*> reduce isLeft fv (bv :< (nm, x)) y 
-        (IRPi rig pinfo nm x y) => do
+        IRPi rig pinfo nm x y => do
           IRPi rig
             <$> traverse (\n => reduce isLeft fv bv n) pinfo
             <*> pure nm
             <*> reduce isLeft fv bv x
             <*> reduce isLeft fv (bv :< (nm, x)) y 
-        (IRLet rig nm type val body) => do
+        IRLet rig nm type val body => do
           typecheck isLeft fv bv val type
           reduce isLeft fv bv $ subst' val 0 body
-        (IRPrim c) => pure $ IRPrim c
+        IRPrim c => pure $ IRPrim c
 
     typeofAppChain bv ac = do
       logStr 10 "typeofAppChain \{show isLeft} lhs=\{show ac.lhs} args=\{show $ ac.args} nameds = \{show $ ac.nameds}"
@@ -200,12 +200,13 @@ parameters
       if ac.argCount == 0 
          then typeof isLeft fv bv ac.lhs 
          else case ac.lhs of
-          (IRLam rig pinfo nm ty body) => do
+          IRLam rig pinfo nm ty body => do
             let Just (arg, ac) = nextArg pinfo nm ac
             | Nothing => throwError $ AppNameNotFoundError nm
             typecheck isLeft fv bv arg ty
-            typeofAppChain isLeft fv bv $ {lhs := subst' arg 0 body} ac
-          (IRGlobalVar _) => do
+            typeofAppChain isLeft fv bv $ 
+              {lhs := subst' arg 0 body} ac
+          IRGlobalVar _ => do
             typeof_lhs <- typeof bv ac.lhs
             pure $ unAC $ {lhs := typeof_lhs} ac
           _ => throwError AppBadLhsError
@@ -217,12 +218,13 @@ parameters
       if ac.argCount == 0
         then reduce isLeft fv bv ac.lhs
         else case ac.lhs of
-          (IRLam rig pinfo nm ty body) => do
+          IRLam rig pinfo nm ty body => do
             let Just (arg, ac) = nextArg pinfo nm ac
             | Nothing => throwError $ AppNameNotFoundError nm
             typecheck isLeft fv bv arg ty
-            reduceAppChain isLeft fv bv $ {lhs := subst' arg 0 body} ac
-          (IRGlobalVar _) => pure $ unAC ac
+            reduceAppChain isLeft fv bv $ 
+              {lhs := subst' arg 0 body} ac
+          IRGlobalVar _ => pure $ unAC ac
           _ => throwError AppBadLhsError
 
   -- TODO: Impl unify
