@@ -29,7 +29,21 @@ data UnificationError =
   ||| Left-hand side of a function application expression is not a function
   AppBadLhsError | 
   ||| Didn't find an appropriately named argument value during reduction
-  AppNameNotFoundError Name
+  AppNameNotFoundError Name |
+  ||| Unifying unsupported pair of types
+  UnsupportedUnificationError |
+  ||| Attempting to unify non-equal variables
+  NEVarsError Name Name |
+  ||| Attempting to unify non-equal primitives
+  NEPrimitivesError Constant Constant |
+  ||| Attempting to unify free variable with bound expression
+  UnhandledFvEqBvError | 
+  ||| Attempting to unify bound variable with any express that isn't itself
+  UnifyingLocalVarError |
+  ||| Unifying different apps
+  AppUnificationError |
+  LamUnificationError |
+  PiUnificationError
 
 public export
 Show UnificationError where
@@ -40,6 +54,14 @@ Show UnificationError where
   show AppReductionError = "AppReductionError"
   show AppBadLhsError = "AppBadLhsError"
   show (AppNameNotFoundError nm) = "AppNameNotFoundError \{show nm}"
+  show (UnsupportedUnificationError) = "UnsupportedUnificationError"
+  show (NEVarsError nm nm') = "NEVarsError \{show nm} \{show nm'}"
+  show (NEPrimitivesError nm nm') = "NEVarsError \{show nm} \{show nm'}"
+  show (UnhandledFvEqBvError) = "UnhandledFvEqBvError"
+  show (UnifyingLocalVarError) = "UnifyingLocalVarError"
+  show (AppUnificationError) = "AppUnificationError"
+  show (LamUnificationError) = "LamUnificationError"
+  show (PiUnificationError) = "PiUnificationError"
 
 public export
 ||| Fetch error location if possible

@@ -38,6 +38,7 @@ populateGVIR = mapMIR $ \case
       | mult => throwError $ AmbiguousGlobalVarError nm $ map fst mult
     converted <- convertToIR [<] [<] ty
     modify $ insert nm (converted, i.nametype)
+    modify $ insert n (converted, i.nametype)
     pure t
   t => pure t
 
@@ -68,7 +69,7 @@ mockGV' (nm :: nms) gv = do
     | [] => throwError $ GlobalVarNotFound nm
     | mult => throwError $ AmbiguousGlobalVarError nm $ map fst mult
   converted <- convertToIR [<] [<] ty
-  insert nm (converted, i.nametype) <$> mockGV' nms gv
+  insert n (converted, i.nametype) <$> insert nm (converted, i.nametype) <$> mockGV' nms gv
 
 %macro
 public export

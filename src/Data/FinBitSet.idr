@@ -37,6 +37,10 @@ public export
 removeAll : FinBitSet -> FinBitSet -> FinBitSet
 removeAll (MkFBS a) (MkFBS b) = MkFBS $ b .&. (complement a)
 
+public export
+merge : FinBitSet -> FinBitSet -> FinBitSet
+merge (MkFBS a) (MkFBS b) = MkFBS $ a .|. b
+
 toLN' : Nat -> Integer -> List Nat
 toLN' x s = 
   if s == 0 

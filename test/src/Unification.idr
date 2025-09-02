@@ -75,10 +75,10 @@ runReduction :
 runReduction gv freeVars from = do
   fv <- convertFreeVars freeVars
   from' <- convertToIR fv [<] from
-  let cb = baseConstraints (length freeVars) 0
+  let cb = baseConstraints $ MkBounds (length freeVars) 0
   evalStateT cb $ do
     reduced <- 
-      reduce @{%search} @{%search} @{logWriter} {bds = MKBounds (length freeVars) 0} gv True fv BoundVars.Lin from'
+      reduce @{%search} @{%search} @{logWriter} {bds = MkBounds (length freeVars) 0} gv (MkAFV fv [<]) True BoundVars.Lin from'
 
     logStr @{logWriter} 0 "result = \{show reduced}"
 
@@ -144,10 +144,10 @@ runTypeof :
 runTypeof gv freeVars from = do
   fv <- convertFreeVars freeVars
   from' <- convertToIR fv [<] from
-  let cb = baseConstraints (length freeVars) 0
+  let cb = baseConstraints $ MkBounds (length freeVars) 0
   evalStateT cb $ do
     reduced <- 
-      typeof @{%search} @{%search} @{logWriter} {bds = MKBounds (length freeVars) 0} gv True fv BoundVars.Lin from'
+      typeof @{%search} @{%search} @{logWriter} {bds = MkBounds (length freeVars) 0} gv (MkAFV fv [<]) True BoundVars.Lin from'
 
     logStr @{logWriter} 0 "result = \{show reduced}"
 
@@ -210,4 +210,5 @@ typeofs = MkGroup "IR Typeof tests"
   [ ("Global variable typeof", `(Nat) `typeofIs` `(Type))
   , ("Free variable typeof", typeofIs {fvs=[<("x", `(Nat))]} `(x) `(Nat))
   , ("Local variable typeof", typeofIs `(let x : Nat = Z in x) `(Prelude.Types.Nat))
+  , ("Application (with globals)", `(S Z) `typeofIs` `(Prelude.Types.Nat))
   ]

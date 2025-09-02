@@ -115,6 +115,12 @@ namespace BoundVars
   Show (BoundVars fvs bjn) where
     show f = "\{show_inner f}]"
 
+  public export
+  Eq (BoundVars fvs bjn) where
+    (==) Lin Lin = True
+    (==) (x :< y) (x' :< y') = x == x && y == y
+    (==) _ _ = False
+
 public export
 ||| Find the index of a bound variable by its name
 queryBV : Name -> BoundVars fvs bjn -> Maybe $ Fin bjn
