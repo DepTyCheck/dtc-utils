@@ -67,8 +67,12 @@ singleConversions = MkGroup "Conversion of minimal expressions"
   , ("ILet shadowing free variables", letShadows)
   ]
 
-artInner : GlobalVars -> SnocList (Name, TTImp) -> TTImp -> TTImp -> EitherT UnificationError (WriterT (List String) Identity) TTImp
-artInner gv freeVars from to = do
+runReduction : 
+  GlobalVars -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  EitherT UnificationError (WriterT (List String) Identity) TTImp
+runReduction gv freeVars from = do
   fv <- convertFreeVars freeVars
   from' <- convertToIR fv [<] from
   let cb = baseConstraints (length freeVars) 0
@@ -80,20 +84,100 @@ artInner gv freeVars from to = do
 
     pure $ convertFromIR fv [<] reduced
 
--- Reduction
-assertReducesTo : Monad m => GlobalVars -> SnocList (Name, TTImp) -> TTImp -> TTImp -> TestT m ()
-assertReducesTo gv freeVars from to = do
-  let (res, logs) = runIdentity $ runWriterT $ runEitherT $ artInner gv freeVars from to
-
+assertReturns : 
+  Monad m =>
+  Eq t =>
+  Show t =>
+  EitherT UnificationError (WriterT (List String) Identity) t ->
+  t ->
+  TestT m ()
+assertReturns a b = do
+  let (res, logs) = runIdentity $ runWriterT $ runEitherT $ a
   footnote $ joinBy "\n" logs
-  -- traverse_ (\x => footnote x) logs
-
   res <- evalEither res
+  res === b
 
-  res === to
+assertFails : 
+  Monad m =>
+  Eq t =>
+  Show t =>
+  EitherT UnificationError (WriterT (List String) Identity) t ->
+  UnificationError ->
+  TestT m ()
+assertFails a b = do
+  let (res, logs) = runWriter $ runEitherT $ a
+  footnote $ joinBy "\n" logs
+  diff res (\a,_=>isLeft a) b
+
+-- -- Reduction
+assertReducesTo : 
+  Monad m => 
+  GlobalVars -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  TTImp -> 
+  TestT m ()
+assertReducesTo gv freeVars from to = do
+  flip assertReturns to $ runReduction gv freeVars from
+
+assertReduceFails : 
+  Monad m => 
+  GlobalVars -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  UnificationError -> 
+  TestT m ()
+assertReduceFails gv fv from to = do
+  flip assertFails to $ runReduction gv fv from
 
 reducesTo : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> TTImp -> Property
 reducesTo {fvs} from to = property1 $ assertReducesTo (mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
+
+reduceFails : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> UnificationError -> Property
+reduceFails {fvs} from to = property1 $ assertReduceFails (mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
+
+runTypeof : 
+  GlobalVars -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  EitherT UnificationError (WriterT (List String) Identity) TTImp
+runTypeof gv freeVars from = do
+  fv <- convertFreeVars freeVars
+  from' <- convertToIR fv [<] from
+  let cb = baseConstraints (length freeVars) 0
+  evalStateT cb $ do
+    reduced <- 
+      typeof @{%search} @{%search} @{logWriter} {bds = MKBounds (length freeVars) 0} gv True fv BoundVars.Lin from'
+
+    logStr @{logWriter} 0 "result = \{show reduced}"
+
+    pure $ convertFromIR fv [<] reduced
+
+assertTypeofIs : 
+  Monad m => 
+  GlobalVars -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  TTImp -> 
+  TestT m ()
+assertTypeofIs gv freeVars from to = do
+  flip assertReturns to $ runTypeof gv freeVars from
+
+assertTypeofFails : 
+  Monad m => 
+  GlobalVars -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  UnificationError -> 
+  TestT m ()
+assertTypeofFails gv fv from to = do
+  flip assertFails to $ runTypeof gv fv from
+
+typeofIs : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> TTImp -> Property
+typeofIs {fvs} from to = property1 $ assertTypeofIs (mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
+
+typeofFails : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> UnificationError -> Property
+typeofFails {fvs} from to = property1 $ assertReduceFails (mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
 
 public export
 reductions : Group
@@ -101,13 +185,29 @@ reductions = MkGroup "IR Reduction tests"
   [ ("Global variables don't reduce", `(Nat) `reducesTo` `(Nat))
   , ("Free variables don't reduce", reducesTo {fvs = [< (`{x}, `(Nat))]} `(x) `(x))
   , ("(\\x=>S x) x -> S x", `((\x: Nat => S x) Z) `reducesTo` `(S Z))
-  , ("(\\x,y=>x+y) 1 2 -> 1 + 2", `((\x: Nat, y: Nat => x+y) (S Z) Z) `reducesTo` `((S Z) + Z))
-  -- -- TODO: this should actually be rejected!
-  -- , ("(\\x,y=>x+y) {x=1} 2 -> 1 + 2", `((\x: Nat, y: Nat => x+y) {x=S Z} Z) `reducesTo` `((S Z) + Z))
-  , ("(\\x,y=>x+y) 1 {y=2} -> 1 + 2", `((\x: Nat, y: Nat => x+y) (S Z) {y=Z}) `reducesTo` `((S Z) + Z))
-  , ("(\\x,y=>x+y) {x=1} {y=2} -> 1 + 2", `((\x: Nat, y: Nat => x+y) {x=S Z} {y=Z}) `reducesTo` `((S Z) + Z))
-  , ("(\\x,y=>x+y) {y=2} {x=1} -> 1 + 2", `((\x: Nat, y: Nat => x+y) {y=Z} {x=S Z}) `reducesTo` `((S Z) + Z))
+  , ( "(\\x,y=>x+y) 1 2 -> 1 + 2"
+    , `((\x: Nat, y: Nat => x+y) (S Z) Z) `reducesTo` `((S Z) + Z))
+  , ( "(\\x,y=>x+y) {x=1} 2 fails"
+    , `((\x: Nat, y: Nat => x+y) {x=S Z} Z) `reduceFails` AppNameNotFoundError "x")
+  , ( "(\\x,y=>x+y) 1 {y=2} -> 1 + 2"
+    , `((\x: Nat, y: Nat => x+y) (S Z) {y=Z}) `reducesTo` `((S Z) + Z))
+  , ( "(\\x,y=>x+y) {x=1} {y=2} -> 1 + 2"
+    , `((\x: Nat, y: Nat => x+y) {x=S Z} {y=Z}) `reducesTo` `((S Z) + Z))
+  , ( "(\\x,y=>x+y) {y=2} {x=1} -> 1 + 2"
+    , `((\x: Nat, y: Nat => x+y) {y=Z} {x=S Z}) `reducesTo` `((S Z) + Z))
   , ("let x=Z in S x -> S Z", `(let x : Nat = Z in S x) `reducesTo` `(S Z))
   , ( "higher order functions 1"
     , `((\x : ((x : Nat) -> Nat), y: Nat => x y) (\x : Nat => S (S x)) Z) `reducesTo` `(S (S Z)))
+  , ( "higher order functions 2"
+    , `((\x : ((x : Nat) -> Nat), y: Nat => x y) S Z) `reducesTo` `(S  Z))
+  , ("1=1", `(S Z) `reducesTo` `(S Z))
+  , ("Vect l t", reducesTo {fvs=[<("l", `(Nat))]} `(Vect l Nat) `(Vect l Nat))
+  ]
+
+public export
+typeofs : Group
+typeofs = MkGroup "IR Typeof tests"
+  [ ("Global variable typeof", `(Nat) `typeofIs` `(Type))
+  , ("Free variable typeof", typeofIs {fvs=[<("x", `(Nat))]} `(x) `(Nat))
+  , ("Local variable typeof", typeofIs `(let x : Nat = Z in x) `(Prelude.Types.Nat))
   ]

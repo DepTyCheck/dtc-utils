@@ -265,6 +265,7 @@ runGolden = goldenRunner
   , quoteQualities
   , singleConversions
   , reductions
+  , typeofs
   ]
 
 
