@@ -90,7 +90,7 @@ localSI f (MkShadowingInfoT s) = MkShadowingInfoT $ local f s
 
 countBVHelper : MonadState (SortedSet Name) m => TTImp -> m TTImp -> m TTImp
 countBVHelper (IBindVar _ s) m = do
-  modify (insert (UN (Basic s)))
+  modify (insert s)
   m
 countBVHelper (IAs _ _ _ n _) m = do
   modify (insert n)

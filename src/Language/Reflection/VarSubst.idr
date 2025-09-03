@@ -61,7 +61,7 @@ substituteBindImpl :
 substituteBindImpl vMap (IVar fc nm1) m = 
   if ((not !isQuote) && (not !(varIsShadowed nm1))) then fromMaybe m $ pure <$> lookup nm1 vMap else m
 substituteBindImpl vMap (IBindVar fc nm1) m = 
-  if ((not !isQuote) && (not !(varIsShadowed (fromString nm1)))) then fromMaybe m $ pure <$> lookup (fromString nm1) vMap else m
+  if ((not !isQuote) && (not !(varIsShadowed nm1))) then fromMaybe m $ pure <$> lookup nm1 vMap else m
 substituteBindImpl _ _ m = m
 
 substituteBindN : SortedMap Name TTImp -> TTImp -> ShadowingInfoT (QuoteInfoT Identity) TTImp -> ShadowingInfoT (QuoteInfoT Identity) TTImp

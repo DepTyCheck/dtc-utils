@@ -216,9 +216,9 @@ restoreApp' nm (sx :< (MkArg count _ name type)) =
 restoreBind : Name -> SnocList Arg -> TTImp
 restoreBind nm [<] = IVar EmptyFC nm
 restoreBind nm (sx :< (MkArg count ExplicitArg name type)) =
-  IApp emptyFC (restoreBind nm sx) $ IBindVar EmptyFC $ nameStr $ fromMaybe "n" name
+  IApp emptyFC (restoreBind nm sx) $ IBindVar EmptyFC $ fromMaybe "n" name
 restoreBind nm (sx :< (MkArg count _ name type)) =
-  INamedApp emptyFC (restoreBind nm sx) (fromMaybe "n" name) $ IBindVar EmptyFC $ nameStr $ fromMaybe "n" name
+  INamedApp emptyFC (restoreBind nm sx) (fromMaybe "n" name) $ IBindVar EmptyFC $ fromMaybe "n" name
 
 ||| Restore IApp from a reverse list of args, binding variables, doing a back-and-forth string name conversion
 restoreBind' : Name -> SnocList Arg -> SnocList Name -> TTImp
@@ -226,7 +226,7 @@ restoreBind' nm [<] [<] = IVar EmptyFC nm
 restoreBind' nm _ [<] = IVar EmptyFC nm
 restoreBind' nm [<] _ = IVar EmptyFC nm
 restoreBind' nm (sx :< (MkArg count ExplicitArg name type)) (sx' :< vname) =
-  IApp emptyFC (restoreBind' nm sx sx') $ IBindVar EmptyFC $ nameStr $ vname
+  IApp emptyFC (restoreBind' nm sx sx') $ IBindVar EmptyFC $ vname
 restoreBind' nm (sx :< _) (sx' :< _) = restoreBind' nm sx sx'
 -- restoreBind' nm (sx :< (MkArg count _ name type)) (sx' :< vname) =
 --   INamedApp emptyFC (restoreBind' nm sx sx') (fromMaybe "n" name) $ IBindVar EmptyFC $ nameStr $ vname
@@ -475,9 +475,9 @@ argFn (_ :: xs) t = argFn xs t
 
 argBindTuple : List Name -> TTImp
 argBindTuple [] = `(())
-argBindTuple (x :: []) = IBindVar emptyFC $ nameStr x
-argBindTuple (x :: (y :: [])) = `(MkPair ~(IBindVar emptyFC $ nameStr x) ~(IBindVar emptyFC $ nameStr y))
-argBindTuple (x :: xs) = `(MkPair ~(IBindVar emptyFC $ nameStr x) ~(argBindTuple xs))
+argBindTuple (x :: []) = IBindVar emptyFC x
+argBindTuple (x :: (y :: [])) = `(MkPair ~(IBindVar emptyFC x) ~(IBindVar emptyFC y))
+argBindTuple (x :: xs) = `(MkPair ~(IBindVar emptyFC x) ~(argBindTuple xs))
 
 fnClaim : Name -> TTImp -> Decl
 fnClaim nm =
@@ -712,8 +712,8 @@ castInjImplDef nm td cis = do
       rArgs <- traverse remapNameArg conArgs
       tupArgs <- traverse remapNameArg conArgs
       prfSym <- genSym "proof"
-      let prfBind = IBindVar emptyFC $ nameStr prfSym
-      let prfVar = IVar emptyFC $ fromString $ nameStr $ prfSym
+      let prfBind = IBindVar emptyFC prfSym
+      let prfVar = IVar emptyFC prfSym
       let lBind = restoreBind' conName (cast $ filter isExplicit $ conArgs) $ cast $ mapMaybe (.name) $ filter isExplicit $ lArgs
       let rBind = restoreBind' conName (cast $ filter isExplicit $ conArgs) $ cast $ mapMaybe (.name) $ filter isExplicit $ rArgs
       let tBind = argBindTuple $ mapMaybe (.name) $ filter isExplicit $ tupArgs
