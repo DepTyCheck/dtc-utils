@@ -174,10 +174,10 @@ assertTypeofFails gv fv from to = do
   flip assertFails to $ runTypeof gv fv from
 
 typeofIs : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> TTImp -> Property
-typeofIs {fvs} from to = property1 $ assertTypeofIs (mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
+typeofIs {fvs} from to = property1 $ assertTypeofIs (mockGV [`{S}, `{Z}, `{Nat}, `{List}]) fvs from to
 
 typeofFails : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> UnificationError -> Property
-typeofFails {fvs} from to = property1 $ assertReduceFails (mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
+typeofFails {fvs} from to = property1 $ assertReduceFails (mockGV [`{S}, `{Z}, `{Nat}, `{List}]) fvs from to
 
 public export
 reductions : Group
@@ -202,6 +202,8 @@ reductions = MkGroup "IR Reduction tests"
     , `((\x : ((x : Nat) -> Nat), y: Nat => x y) S Z) `reducesTo` `(S  Z))
   , ("1=1", `(S Z) `reducesTo` `(S Z))
   , ("Vect l t", reducesTo {fvs=[<("l", `(Nat))]} `(Vect l Nat) `(Vect l Nat))
+  , ("Big functions", `((\x : Nat, y : Nat, z : Nat => x + y + z) Z Z Z) `reducesTo` `(Z + Z + Z))
+  , ("Partial application", `((\x : Nat, y : Nat, z : Nat => x + y + z) Z) `reducesTo` `((\y : Nat, z : Nat => Z + y + z)))
   ]
 
 public export
@@ -211,4 +213,8 @@ typeofs = MkGroup "IR Typeof tests"
   , ("Free variable typeof", typeofIs {fvs=[<("x", `(Nat))]} `(x) `(Nat))
   , ("Local variable typeof", typeofIs `(let x : Nat = Z in x) `(Prelude.Types.Nat))
   , ("Application (with globals)", `(S Z) `typeofIs` `(Prelude.Types.Nat))
+  , ("Application (with lambda)", `((\x: Nat => S x) Z) `typeofIs` `(Prelude.Types.Nat))
+  , ("Generic type", `(List Nat) `typeofIs` `(Type))
+  , ("Partial application", typeofIs {fvs=[<("vect", `((len : Nat) -> (elem : Type) -> Type))]} `(vect (S Z)) `((elem : Type) -> Type))
+  , ("Lambda over fn", typeofIs {fvs=[<("vect", `((len : Nat) -> (elem : Type) -> Type))]} `((\x : Nat => vect x Nat)) `((x : Nat) -> Type))
   ]

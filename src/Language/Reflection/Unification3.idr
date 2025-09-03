@@ -189,6 +189,12 @@ parameters
           IRGlobalVar _ => do
             typeof_lhs <- typeof bv ac.lhs
             typeofPiAppChain bv $ {lhs := typeof_lhs} ac
+          IRFreeVar _ => do
+            typeof_lhs <- typeof bv ac.lhs
+            typeofPiAppChain bv $ {lhs := typeof_lhs} ac
+          IRLocalVar _ => do
+            typeof_lhs <- typeof bv ac.lhs
+            typeofPiAppChain bv $ {lhs := typeof_lhs} ac
           _ => throwError AppBadLhsError
 
     typeofPiAppChain bv ac = do
@@ -204,6 +210,10 @@ parameters
               {lhs := subst' arg 0 body} ac
           IRGlobalVar _ => do
             pure $ unAC ac
+          IRLocalVar _ => do
+            pure $ unAC ac
+          IRFreeVar _ => do
+            pure $ unAC ac
           _ => throwError AppBadLhsError
 
     reduceAppChain bv ac = do
@@ -218,6 +228,8 @@ parameters
             reduceAppChain isLeft bv $ 
               {lhs := subst' arg 0 body} ac
           IRGlobalVar _ => pure $ unAC ac
+          IRFreeVar _ => pure $ unAC ac
+          IRLocalVar _ => pure $ unAC ac
           _ => throwError AppBadLhsError
 
   fvEqFv isLeft fv isLeft' fv' = do
