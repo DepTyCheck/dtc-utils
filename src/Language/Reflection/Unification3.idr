@@ -176,7 +176,10 @@ parameters
         IRPrim c => pure $ IRPrim c
 
     typeofAppChain bv ac = do
-      logStr 10 "typeofAppChain \{show isLeft} lhs=\{show ac.lhs} args=\{show $ ac.args} nameds = \{show $ ac.nameds}"
+      logStr 10 $ concat {t = List}
+        [ "typeofAppChain \{show isLeft} lhs=\{show ac.lhs}"
+        , "args=\{show $ ac.args} nameds = \{show $ ac.nameds}"
+        ]
       if ac.argCount == 0 
          then typeof isLeft bv ac.lhs 
          else case ac.lhs of
@@ -198,7 +201,10 @@ parameters
           _ => throwError AppBadLhsError
 
     typeofPiAppChain bv ac = do
-      logStr 10 "typeofPiAppChain \{show isLeft} lhs=\{show ac.lhs} args=\{show $ ac.args} nameds = \{show $ ac.nameds}"
+      logStr 10 $ concat {t = List} $
+        [ "typeofPiAppChain \{show isLeft} lhs=\{show ac.lhs} "
+        , "args=\{show $ ac.args} nameds = \{show $ ac.nameds}"
+        ]
       if ac.argCount == 0 
          then pure ac.lhs 
          else case ac.lhs of
@@ -217,7 +223,10 @@ parameters
           _ => throwError AppBadLhsError
 
     reduceAppChain bv ac = do
-      logStr 10 "reduceAppChain \{show isLeft} lhs=\{show ac.lhs} args=\{show $ ac.args}  nameds = \{show $ ac.nameds}"
+      logStr 10 $ concat {t = List}
+        [ "reduceAppChain \{show isLeft} lhs=\{show ac.lhs} "
+        , "args=\{show $ ac.args}  nameds = \{show $ ac.nameds}"
+        ]
       if ac.argCount == 0
         then reduce isLeft bv ac.lhs
         else case ac.lhs of
@@ -244,11 +253,15 @@ parameters
         let nmL = merge b1.membersL b2.membersL
         let nmR = merge b1.membersR b2.membersR
         unify it1 [<] v1 it2 [<] v2
-        put $ mergeIntoAndUpdate cs bi1 bi2 (toList nmL) (toList nmR) $ {membersL := nmL, membersR := nmR} b1
+        put $ 
+          mergeIntoAndUpdate cs bi1 bi2 (toList nmL) (toList nmR) $ 
+            {membersL := nmL, membersR := nmR} b1
       (m1, m2) => do
         let nmL = merge b1.membersL b2.membersL
         let nmR = merge b1.membersR b2.membersR
-        put $ mergeIntoAndUpdate cs bi1 bi2 (toList nmL) (toList nmR) $ {membersL := nmL, membersR := nmR, equalsTo := m1 <|> m2} b1
+        put $ 
+          mergeIntoAndUpdate cs bi1 bi2 (toList nmL) (toList nmR) $ 
+            {membersL := nmL, membersR := nmR, equalsTo := m1 <|> m2} b1
  
   fvEqExpr isLeft fv isLeft' expr = do
     logStr 10 "fvEqExpr \{show isLeft} \{show fv} \{show isLeft'} \{show expr}"
@@ -256,7 +269,10 @@ parameters
     let (Just unbound) = unbind expr
     | _ => throwError UnhandledFvEqBvError
     case b.equalsTo of
-      Nothing => modify $ setBucketOf isLeft fv $ {equalsTo := Just (isLeft' ** unbound)} b
+      Nothing => 
+        modify $ 
+          setBucketOf isLeft fv $ 
+            {equalsTo := Just (isLeft' ** unbound)} b
       Just (isLeft'' ** oldVal) => do
         logStr 11 "old val of \{show fv} is \{show oldVal}"
         unify isLeft' [<] unbound isLeft'' [<] oldVal
@@ -268,21 +284,34 @@ parameters
     modify $ {fords $= (((isLeft ** ub), (isLeft' ** ub')) ::)}
 
   unifyAppChains isLeft bv ac isLeft' bv' ac' = do
-    logStr 10 "unifyAppChains \{show isLeft} \{show ac.lhs} \{show ac.args} \{show isLeft'} \{show ac'.lhs} \{show ac'.args}"
-    let True = length ac.args == length ac'.args && length ac.autos == length ac'.autos && length ac.explicits == length ac'.explicits
+    logStr 10 $ concat {t = List}
+      [ "unifyAppChains \{show isLeft} \{show ac.lhs} "
+      , "\{show ac.args} \{show isLeft'} \{show ac'.lhs} \{show ac'.args}"
+      ]
+    let True = length ac.args == length ac'.args 
+            && length ac.autos == length ac'.autos 
+            && length ac.explicits == length ac'.explicits
     | _ => throwError $ AppUnificationError
     unify isLeft bv ac.lhs isLeft' bv' ac'.lhs
     traverse_ 
-      (\(a, b) => unify isLeft bv (index a ac.args).arg isLeft' bv' (index b ac'.args).arg) $ 
-        zip ac.autos ac'.autos
+      (\(a, b) => 
+        unify 
+          isLeft bv (index a ac.args).arg 
+          isLeft' bv' (index b ac'.args).arg) $ 
+            zip ac.autos ac'.autos
     traverse_ 
-      (\(a, b) => unify isLeft bv (index a ac.args).arg isLeft' bv' (index b ac'.args).arg) $ 
-        zip ac.explicits ac'.explicits
+      (\(a, b) => 
+        unify 
+          isLeft bv (index a ac.args).arg 
+          isLeft' bv' (index b ac'.args).arg) $ 
+            zip ac.explicits ac'.explicits
     let nll = zip (kvList ac.nameds) (kvList ac'.nameds)
     traverse_ 
       (\((n1, a), (n2, b)) => 
         if n1 == n2 
-           then unify isLeft bv (index a ac.args).arg isLeft' bv' (index b ac'.args).arg 
+           then 
+            unify isLeft bv (index a ac.args).arg 
+                  isLeft' bv' (index b ac'.args).arg 
            else throwError AppUnificationError) 
       nll
 
@@ -343,6 +372,7 @@ parameters
         -- TODO: compare pinfos
         unify isLeft bv ty isLeft' bv' ty'
         unify isLeft (bv :< (nm, ty)) body isLeft' (bv' :< (nm', ty')) body'
-      (IRPrim c, IRPrim c') => if c == c' then pure () else throwError $ NEPrimitivesError c c' 
+      (IRPrim c, IRPrim c') => 
+        if c == c' then pure () else throwError $ NEPrimitivesError c c' 
       (IRType, IRType) => pure ()
       (_, _) => throwError UnsupportedUnificationError
