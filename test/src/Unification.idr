@@ -339,5 +339,22 @@ typeofs = MkGroup "IR Typeof tests"
 public export
 unifys : Group
 unifys = MkGroup "IR unification tests"
-  [ ("Free var = Global var", unifiesTo [<("x", `(Type))] `(x) [<] `(Nat) [(["x"], [], Just (False, `(Nat)))])
+  [ ("Free var = Global var", 
+      unifiesTo [<("x", `(Type))] `(x) [<] `(Nat) [(["x"], [], Just (False, `(Nat)))])
+  , ("Free var = Free var", 
+      unifiesTo [<("x", `(Type))] `(x) [< ("y", `(Type))] `(y) [(["x"], ["y"], Nothing)])
+  , ("GV = GV", unifiesTo [<] `(Z) [<] `(Z) [])
+  , ("identical IRApp", unifiesTo [<] `(S Z) [<] `(S Z) [])
+  , ("basic lambdas equal", unifiesTo [<] `(\x : Nat => x) [<] `(\x : Nat => x) []) 
+  , ("basic lambda different", unifyFails [<] `(\x, y : Nat => x) [<] `(\x,y : Nat => y) (NEVarsError "x" "y")) 
+  , ("identical pis", unifiesTo [<] `((x, y : Type) -> x) [<] `((x, y : Type) -> x) [])
+  , ("different pis", unifyFails [<] `((x, y : Type) -> x) [<] `((x, y : Type) -> y) (NEVarsError "x" "y"))
+  , ("crossing-over fn invocations",
+      unifiesTo 
+        [<("Vect", `((len : Nat) -> (elem : Type) -> Type)), ("x", `(Nat))] `(Vect x Nat)
+        [<("Vect", `((len : Nat) -> (elem : Type) -> Type)), ("y", `(Type))] `(Vect (S Z) y)
+        [   (["Vect"],["Vect"], Nothing)
+          , (["x"], [], Just (False, `(S Z)))
+          , ([], ["y"], Just (True, `(Nat)))
+          ])
   ]

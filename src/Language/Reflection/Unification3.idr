@@ -327,20 +327,16 @@ parameters
            then pure () 
            else throwError $ NEVarsError nm nm'
       (IRLocalVar y, IRLocalVar y') => do
-        let (Yes p, Yes p') = (decEq isLeft isLeft', decEq bjn bjn')
+        let Yes p = decEq bjn bjn'
         | _ => do
-           let (bn, _) = index y bv
-           let (bn', _) = index y' bv'
-           throwError $ NEVarsError bn bn'
-        let True = bv == rewrite p' in rewrite p in bv'
-        | _ => do
-           let (bn, _) = index y bv
-           let (bn', _) = index y' bv'
-           throwError $ NEVarsError bn bn'
-        if y == (rewrite p' in y') then pure () else do
-           let (bn, _) = index y bv
-           let (bn', _) = index y' bv'
-           throwError $ NEVarsError bn bn'
+          let (bn, _) = index y bv
+          let (bn', _) = index y' bv'
+          throwError $ NEVarsError bn bn'
+        if y == rewrite p in y' then pure () else do
+          let (bn, _) = index y bv
+          let (bn', _) = index y' bv'
+          throwError $ NEVarsError bn bn'
+        -- TODO: compare bn for more assurances
       (IRFreeVar f, IRFreeVar f') => fvEqFv isLeft f isLeft' f'
       (IRFreeVar f, IRLocalVar b') => do
         let (n1, _) = index f $ thisFv isLeft bds afv
