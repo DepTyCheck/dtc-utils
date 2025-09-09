@@ -31,6 +31,10 @@ record Bounds where
   fvsR : Nat
 
 public export
+Show Bounds where
+  show (MkBounds l r) = "MkBounds \{show l} \{show r}"
+
+public export
 record AllFreeVars (bds : Bounds) where
   constructor MkAFV
   fvL : FreeVars bds.fvsL

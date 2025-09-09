@@ -266,6 +266,7 @@ runGolden = goldenRunner
   , singleConversions
   , reductions
   , typeofs
+  , unifys
   ]
 
 

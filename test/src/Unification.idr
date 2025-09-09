@@ -99,7 +99,6 @@ assertReturns a b = do
 
 assertFails : 
   Monad m =>
-  Eq t =>
   Show t =>
   EitherT UnificationError (WriterT (List String) Identity) t ->
   UnificationError ->
@@ -130,11 +129,13 @@ assertReduceFails :
 assertReduceFails gv fv from to = do
   flip assertFails to $ runReduction gv fv from
 
+mockGlobals = mockGV [`{S}, `{Z}, `{Nat}, "List"]
+
 reducesTo : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> TTImp -> Property
-reducesTo {fvs} from to = property1 $ assertReducesTo (mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
+reducesTo {fvs} from to = property1 $ assertReducesTo mockGlobals fvs from to
 
 reduceFails : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> UnificationError -> Property
-reduceFails {fvs} from to = property1 $ assertReduceFails (mockGV [`{S}, `{Z}, `{Nat}]) fvs from to
+reduceFails {fvs} from to = property1 $ assertReduceFails mockGlobals fvs from to
 
 runTypeof : 
   GlobalVars -> 
@@ -174,10 +175,126 @@ assertTypeofFails gv fv from to = do
   flip assertFails to $ runTypeof gv fv from
 
 typeofIs : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> TTImp -> Property
-typeofIs {fvs} from to = property1 $ assertTypeofIs (mockGV [`{S}, `{Z}, `{Nat}, `{List}]) fvs from to
+typeofIs {fvs} from to = property1 $ assertTypeofIs mockGlobals fvs from to
 
 typeofFails : {default [<] fvs : SnocList (Name, TTImp)} -> TTImp -> UnificationError -> Property
-typeofFails {fvs} from to = property1 $ assertReduceFails (mockGV [`{S}, `{Z}, `{Nat}, `{List}]) fvs from to
+typeofFails {fvs} from to = property1 $ assertReduceFails mockGlobals fvs from to
+
+runUnify : 
+  GlobalVars ->  
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  SnocList (Name, TTImp) -> 
+  TTImp ->
+  EitherT UnificationError (WriterT (List String) Identity) 
+    (b : Bounds ** (FreeVars b.fvsL, FreeVars b.fvsR, Constraints b))
+runUnify gv fvL lhs fvR rhs = do
+  fvL' <- convertFreeVars fvL
+  lhs' <- convertToIR fvL' [<] lhs
+  fvR' <- convertFreeVars fvR
+  rhs' <- convertToIR fvR' [<] rhs
+  let cb = baseConstraints $ MkBounds (length fvL) (length fvR)
+  (newState, _) <- runStateT {m = EitherT UnificationError (WriterT (List String) Identity)} cb $ do
+    unify 
+      @{%search} @{%search} @{logWriter} 
+      {bds = MkBounds (length fvL) (length fvR)} 
+      gv (MkAFV fvL' fvR') True [<] lhs' False [<] rhs'
+  pure (MkBounds (length fvL) (length fvR) ** (fvL', fvR', newState))
+
+allSameAs : Eq t => t -> List t -> Bool
+allSameAs x [] = True
+allSameAs x (a :: as) = x == a && allSameAs x as
+
+allSame : Eq t => List t -> Bool
+allSame [] = True
+allSame [x] = True
+allSame (x :: xs) = allSameAs x xs
+
+hasBucket : 
+  List Name -> 
+  List Name -> 
+  Maybe (Bool, TTImp) -> 
+  (b : Bounds ** (FreeVars b.fvsL, FreeVars b.fvsR, Constraints b)) -> 
+  Bool
+hasBucket ls rs val (b ** (fvL, fvR, constraints)) = do
+  let Just ls' = traverse (flip queryFV fvL) ls
+  | _ => False
+  let Just rs' = traverse (flip queryFV fvR) rs
+  | _ => False
+  let lsBkt = map (\x => bIndexOf True x constraints) ls'
+  let rsBkt = map (\x => bIndexOf False x constraints) rs'
+  let True = allSame $ lsBkt ++ rsBkt
+  | _ => False
+  let (bIndex :: _) = lsBkt ++ rsBkt
+  | _ => True
+  let bucket = index bIndex constraints.bucketData
+  let True = FinBitSet.fromList ls' == bucket.membersL && FinBitSet.fromList rs' == bucket.membersR
+  | _ => False
+  case val of
+    Just (True, val) => do
+      let Just (True ** bucketVal) = bucket.equalsTo
+      | _ => False
+      convertFromIR fvL [<] bucketVal == val
+    Just (False, val) => do
+      let Just (False ** bucketVal) = bucket.equalsTo
+      | _ => False
+      convertFromIR fvR [<] bucketVal == val     
+    Nothing => isNothing bucket.equalsTo
+
+hasBuckets : 
+  List (List Name, List Name, Maybe (Bool, TTImp)) -> 
+  (b : Bounds ** (FreeVars b.fvsL, FreeVars b.fvsR, Constraints b)) -> 
+  Bool
+hasBuckets [] _ = True
+hasBuckets ((a,b,c) :: xs) st = hasBucket a b c st && hasBuckets xs st
+
+assertUnifiesTo : 
+  Monad m => 
+  GlobalVars -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  List (List Name, List Name, Maybe (Bool, TTImp)) ->
+  TestT m ()
+assertUnifiesTo gv fvL lhs fvR rhs buckets = do
+  let (result, logs) = runIdentity $ runWriterT $ runEitherT $ runUnify gv fvL lhs fvR rhs
+  footnote $ joinBy "\n" logs
+  constraints <- evalEither result
+  footnote $ "State: \{show constraints}"
+  assert $ hasBuckets buckets constraints
+
+assertUnifyFails : 
+  Monad m => 
+  GlobalVars -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  UnificationError ->
+  TestT m ()
+assertUnifyFails gv fvL lhs fvR rhs err = do
+  flip assertFails err $ runUnify gv fvL lhs fvR rhs
+
+unifiesTo : 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  List (List Name, List Name, Maybe (Bool, TTImp)) ->
+  Property
+unifiesTo fvL lhs fvR rhs buckets = 
+  property1 $ assertUnifiesTo mockGlobals fvL lhs fvR rhs buckets
+
+unifyFails : 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  SnocList (Name, TTImp) -> 
+  TTImp -> 
+  UnificationError ->
+  Property
+unifyFails fvL lhs fvR rhs err = 
+  property1 $ assertUnifyFails mockGlobals fvL lhs fvR rhs err
 
 public export
 reductions : Group
@@ -203,7 +320,7 @@ reductions = MkGroup "IR Reduction tests"
   , ("1=1", `(S Z) `reducesTo` `(S Z))
   , ("Vect l t", reducesTo {fvs=[<("l", `(Nat))]} `(Vect l Nat) `(Vect l Nat))
   , ("Big functions", `((\x : Nat, y : Nat, z : Nat => x + y + z) Z Z Z) `reducesTo` `(Z + Z + Z))
-  , ("Partial application", `((\x : Nat, y : Nat, z : Nat => x + y + z) Z) `reducesTo` `((\y : Nat, z : Nat => Z + y + z)))
+  , ("Partial application", `((\x : Nat, y : Nat, z : Nat => x + y + z) Z) `reducesTo` `((\y : Nat, z : Nat => Z + y + z))) 
   ]
 
 public export
@@ -217,4 +334,10 @@ typeofs = MkGroup "IR Typeof tests"
   , ("Generic type", `(List Nat) `typeofIs` `(Type))
   , ("Partial application", typeofIs {fvs=[<("vect", `((len : Nat) -> (elem : Type) -> Type))]} `(vect (S Z)) `((elem : Type) -> Type))
   , ("Lambda over fn", typeofIs {fvs=[<("vect", `((len : Nat) -> (elem : Type) -> Type))]} `((\x : Nat => vect x Nat)) `((x : Nat) -> Type))
+  ]
+
+public export
+unifys : Group
+unifys = MkGroup "IR unification tests"
+  [ ("Free var = Global var", unifiesTo [<("x", `(Type))] `(x) [<] `(Nat) [(["x"], [], Just (False, `(Nat)))])
   ]

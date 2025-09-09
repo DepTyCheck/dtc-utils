@@ -56,3 +56,7 @@ toLN (MkFBS s) = toLN' 0 s
 public export
 Show FinBitSet where
   show fbs = "fromList \{show $ toLN fbs}"
+
+public export
+Eq FinBitSet where
+  (==) a b = a.inner == b.inner
