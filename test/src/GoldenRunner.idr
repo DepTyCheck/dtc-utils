@@ -142,7 +142,7 @@ testOptions = do
     , interactive := !((Just "true" /=) <$> getEnv "CI")
     , failureFile := Just "failures"
     , onlyNames := onlies <&> \patterns, test => any (`fitsPattern` test) patterns
-    , threads := !nproc'
+    , threads := 2
     } (initOptions runScriptArg True)
 
 --- A universal way to set test pools from different origins ---
