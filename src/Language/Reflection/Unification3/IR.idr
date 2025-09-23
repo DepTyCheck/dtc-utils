@@ -210,11 +210,12 @@ helpPi : (a -> Bool) -> PiInfo a -> Bool
 helpPi f (DefImplicit x) = f x
 helpPi f _ = False
 
+||| IR term is closed (has no free variables)
 public export
 isClosed : IRTerm vs bjn -> Bool
 isClosed (IRFreeVar _) = False
 isClosed (IRLocalVar _) = True
-isClosed (IRGlobalVar _) = ?gv_closed
+isClosed (IRGlobalVar _) = True
 isClosed IRType = True
 isClosed (IRApp l r) = isClosed l && isClosed r
 isClosed (IRAutoApp l r) = isClosed l && isClosed r
@@ -227,6 +228,9 @@ isClosed (IRLet rig _ nT nV inner) =
   isClosed nT && isClosed nV && isClosed inner
 isClosed (IRPrim c) = True
 
+||| Get a version of an IR term with arbitrary local variable count
+|||
+||| Returns `Nothing` if IR term contains a local variable above x
 unbindImpl : (x : Nat) -> IRTerm vs bjn -> Maybe $ IRTerm vs x
 unbindImpl f (IRFreeVar x) = Just $ IRFreeVar x
 unbindImpl f (IRLocalVar x) = IRLocalVar <$> tryToFit x
@@ -252,10 +256,12 @@ unbindImpl f (IRLet rig nm type val body) =
                <*> unbindImpl (S f) body
 unbindImpl f (IRPrim c) = Just $ IRPrim c
 
+||| Get a version of an IR term without bound variables (if possible)
 public export
 unbind : IRTerm vs bjn -> Maybe $ IRTerm vs 0
 unbind = unbindImpl 0
 
+||| Set free variable count for an IR term without them
 public export
 setFV : IRTerm 0 bjn -> IRTerm fvs bjn
 setFV (IRLocalVar x) = IRLocalVar x

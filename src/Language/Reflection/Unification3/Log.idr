@@ -1,3 +1,4 @@
+||| Unifier logging infrastructure
 module Language.Reflection.Unification3.Log
 
 import public Language.Reflection

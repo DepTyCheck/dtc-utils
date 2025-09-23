@@ -1,3 +1,4 @@
+||| Conversions between TTImp and IR
 module Language.Reflection.Unification3.Convert
 
 import public Data.Maybe
@@ -21,6 +22,7 @@ assertName : MonadError UnificationError m => FC -> Maybe Name -> m Name
 assertName fc Nothing  = throwError $ NoNameError fc
 assertName fc (Just n) = pure n
 
+||| Convert TTImp to IR, if possible
 public export
 convertToIR : MonadError UnificationError m => 
               FreeVars fvs -> BoundNames bjn -> TTImp -> m $ IRTerm fvs bjn
@@ -57,6 +59,7 @@ convertToIR freeVars boundVars (IPrimVal fc c) = pure $ IRPrim c
 convertToIR freeVars boundVars (IType fc) = pure $ IRType
 convertToIR freeVars boundVars term = throwError $ UnsupportedExprTypeError term
 
+||| Create FreeVars from a list of free variables (if possible)
 public export
 convertFreeVars : MonadError UnificationError m => 
                   (l : SnocList (Name, TTImp)) -> m $ FreeVars (length l)
@@ -66,6 +69,8 @@ convertFreeVars (sx :< (n, t)) = do
   x' <- convertToIR ffvs' [<] t
   pure $ ffvs' :< (n, x')
 
+||| Convert IR to TTImp
+||| Always succeeds
 public export
 convertFromIR : FreeVars fvs -> BoundNames bjn -> IRTerm fvs bjn -> TTImp
 convertFromIR freeVars boundVars (IRFreeVar x) = 
@@ -98,3 +103,16 @@ convertFromIR freeVars boundVars (IRLet rig nm x y z) =
                               (convertFromIR freeVars (boundVars :< nm) z)
 convertFromIR freeVars boundVars (IRPrim c) = IPrimVal EmptyFC c
 
+
+public export
+finalTTImp : (t : IRTerm vs bjn) -> Maybe TTImp
+finalTTImp (IRGlobalVar nm) = Just $ IVar EmptyFC nm
+finalTTImp IRType = Just $ IType EmptyFC
+finalTTImp (IRApp x y) = IApp EmptyFC <$> finalTTImp x <*> finalTTImp y
+finalTTImp (IRAutoApp x y) = IAutoApp EmptyFC <$> finalTTImp x <*> finalTTImp y
+finalTTImp (IRNamedApp x nm y) = INamedApp EmptyFC <$> finalTTImp x <*> pure nm <*> finalTTImp y
+finalTTImp (IRLam rig pinfo nm x y) = ILam EmptyFC rig <$> (assert_total traverse finalTTImp pinfo) <*> pure (Just nm) <*> finalTTImp x <*> finalTTImp y
+finalTTImp (IRPi rig pinfo nm x y) = IPi EmptyFC rig <$> (assert_total traverse finalTTImp pinfo) <*> pure (Just nm) <*> finalTTImp x <*> finalTTImp y
+finalTTImp (IRLet rig nm type val body) = ILet EmptyFC EmptyFC rig nm <$> finalTTImp type <*> finalTTImp val <*> finalTTImp body
+finalTTImp (IRPrim c) = Just $ IPrimVal EmptyFC c
+finalTTImp _ = Nothing

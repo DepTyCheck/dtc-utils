@@ -1,3 +1,4 @@
+||| Error management during unification
 module Language.Reflection.Unification3.Error
 
 import public Language.Reflection.Unification3.IR
@@ -42,8 +43,12 @@ data UnificationError =
   UnifyingLocalVarError |
   ||| Unifying different apps
   AppUnificationError |
+  ||| Failure when unifying lambdas
   LamUnificationError |
-  PiUnificationError
+  ||| Failure when unifying funcion types
+  PiUnificationError |
+  ||| Dependency cycle present
+  DepCycleError
 
 public export
 Show UnificationError where
@@ -62,6 +67,7 @@ Show UnificationError where
   show (AppUnificationError) = "AppUnificationError"
   show (LamUnificationError) = "LamUnificationError"
   show (PiUnificationError) = "PiUnificationError"
+  show (DepCycleError) = "DepCycleError"
 
 public export
 ||| Fetch error location if possible

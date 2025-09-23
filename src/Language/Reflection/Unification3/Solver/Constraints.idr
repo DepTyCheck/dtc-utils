@@ -24,6 +24,8 @@ import public Data.SortedMap
 
 %default total
 
+||| Free variable counts (index upper bounds) 
+||| for left and right hand side expressions
 public export
 record Bounds where
   constructor MkBounds
@@ -34,6 +36,7 @@ public export
 Show Bounds where
   show (MkBounds l r) = "MkBounds \{show l} \{show r}"
 
+||| Free variable arrays in left and right hand side 
 public export
 record AllFreeVars (bds : Bounds) where
   constructor MkAFV
@@ -84,13 +87,18 @@ public export
 otherFv : (isLeft : Bool) -> (b : Bounds) -> AllFreeVars b -> FreeVars $ otherFvs isLeft b
 otherFv isLeft b = if isLeft then fvR else fvL
 
+||| An equivalency cluster of free variables
 public export
 record ConstraintBucket (bds : Bounds)  where
   constructor MkCB
-  membersL : FinBitSet
-  membersR : FinBitSet
+  ||| LHS free variable members of equivalency cluster
+  membersL : FinBitSet bds.fvsL
+  ||| RHS free variable members of equivalency cluster
+  membersR : FinBitSet bds.fvsR
+  ||| Equivalency cluster value (if present)
   equalsTo : Maybe (isLeft : Bool ** term isLeft bds 0)
 
+||| An empty equivalency bucket
 public export
 emptyCB : ConstraintBucket bds
 emptyCB = MkCB empty empty Nothing
@@ -99,12 +107,19 @@ public export
 Show (ConstraintBucket bds) where
   show cb = "MkCB \{show cb.membersL} \{show cb.membersR} \{show cb.equalsTo}"
 
+||| A constraint set
 public export
 record Constraints (bds : Bounds) where
   constructor MkConstraints
+  ||| Amount of equivalency clusters
+  |||
+  ||| Equal to bds.fvsL + bds.fvsR, but some may be empty
   buckets : Nat
+  ||| Equivalency cluster data
   bucketData : Vect buckets $ ConstraintBucket bds
+  ||| Left hand side free variable equivalency cluster membership map
   fvLToBucket : Vect bds.fvsL $ Fin buckets
+  ||| Right hand side free variable equivalency cluster membership map
   fvRToBucket : Vect bds.fvsR $ Fin buckets
   fords : List ((iL : Bool ** term iL bds 0), (iL : Bool ** term iL bds 0))
 
@@ -112,6 +127,7 @@ public export
 Show (Constraints bds) where
   show cs = "MkConstraints bdata=\{show cs.bucketData} fords=\{show cs.fords}"
 
+||| Singleton equivalency clusters for given lhs and rhs free variable counts
 public export
 baseBuckets : 
   (bds : Bounds) ->
@@ -123,6 +139,7 @@ baseBuckets bds =
   , (\f => MkCB empty (insert f empty) Nothing) <$> allFins bds.fvsR
   )
 
+||| Initial constraints for given lhs and rhs free variable counts
 public export
 baseConstraints : (bds : Bounds) -> Constraints bds
 baseConstraints bds = do
@@ -131,6 +148,7 @@ baseConstraints bds = do
   let (bucketsL, bucketsR) = baseBuckets bds
   MkConstraints (bds.fvsL + bds.fvsR) (bucketsL ++ bucketsR) indicesL indicesR []
 
+||| Id of equivalency cluster to which a given free variable belongs
 public export
 bIndexOf : (isLeft : Bool) ->
            Fin (thisFvs isLeft bds) ->
@@ -139,6 +157,7 @@ bIndexOf : (isLeft : Bool) ->
 bIndexOf True fv cs = index fv cs.fvLToBucket
 bIndexOf False fv cs = index fv cs.fvRToBucket
 
+||| Equivalency cluster to which a given free variable belongs
 public export
 bucketOf : (isLeft : Bool) ->
            Fin (thisFvs isLeft bds) ->
@@ -147,6 +166,7 @@ bucketOf : (isLeft : Bool) ->
 bucketOf True fv cs = flip index cs.bucketData $ index fv cs.fvLToBucket
 bucketOf False fv cs = flip index cs.bucketData $ index fv cs.fvRToBucket
 
+||| Update equivalency cluster to which a given free variable belongs
 public export
 setBucketOf : (isLeft : Bool) ->
               Fin (thisFvs isLeft bds) ->
@@ -158,21 +178,22 @@ setBucketOf True i cb cs =
 setBucketOf False i cb cs = 
   { bucketData $= replaceAt (index i cs.fvRToBucket) cb } cs
 
+||| Transfer all given free variables to given equivalency cluster
 public export
 transferVariables : List (Fin a) -> Fin b  -> Vect a (Fin b) -> Vect a (Fin b)
 transferVariables vars bucket m = foldr (flip replaceAt bucket) m vars
 
-public export
-addBucket : {bds : Bounds} -> 
-            ConstraintBucket bds -> 
-            Constraints bds -> 
-            Constraints bds
-addBucket b = 
-  { buckets $= S
-  , bucketData $= flip snoc b . map {membersL $= removeAll b.membersL, membersR $= removeAll b.membersR}
-  , fvLToBucket $= transferVariables (toList b.membersL) last . map weaken
-  , fvRToBucket $= transferVariables (toList b.membersR) last . map weaken
-  }
+-- public export
+-- addBucket : {bds : Bounds} -> 
+--             ConstraintBucket bds -> 
+--             Constraints bds -> 
+--             Constraints bds
+-- addBucket b = 
+--   { buckets $= S
+--   , bucketData $= flip snoc b . map {membersL $= removeAll b.membersL, membersR $= removeAll b.membersR}
+--   , fvLToBucket $= transferVariables (toList b.membersL) last . map weaken
+--   , fvRToBucket $= transferVariables (toList b.membersR) last . map weaken
+--   }
 
 lefts' : List (isLeft : Bool ** Fin (thisFvs isLeft bds)) -> List (Fin (thisFvs True bds))
 lefts' [] = []
