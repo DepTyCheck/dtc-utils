@@ -1,6 +1,6 @@
-module Language.Reflection.Unification.Engine
+module Language.Reflection.Unifier.LegacyUnifier.Engine
 
-import public Language.Reflection.Unification.Monad
+import public Language.Reflection.Unifier.LegacyUnifier.Monad
 import public Language.Reflection.Expr
 
 (.toList) : SortedSet t -> List t

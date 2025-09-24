@@ -1,6 +1,6 @@
-module Language.Reflection.Unification.Graph
+module Language.Reflection.Unifier.LegacyUnifier.Graph
 
-import public Language.Reflection.Unification.Engine
+import public Language.Reflection.Unifier.LegacyUnifier.Engine
 
 %language ElabReflection
 

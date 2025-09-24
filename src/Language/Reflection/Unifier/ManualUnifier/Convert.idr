@@ -1,14 +1,14 @@
 ||| Conversions between TTImp and IR
-module Language.Reflection.Unification3.Convert
+module Language.Reflection.Unifier.ManualUnifier.Convert
 
 import public Data.Maybe
 import public Data.Fin
 
 import public Control.Monad.Error.Interface
 
-import public Language.Reflection.Unification3.IR
-import public Language.Reflection.Unification3.Context.Main
-import public Language.Reflection.Unification3.Error
+import public Language.Reflection.Unifier.ManualUnifier.IR
+import public Language.Reflection.Unifier.ManualUnifier.Context.Main
+import public Language.Reflection.Unifier.ManualUnifier.Error
 
 import public Language.Reflection
 import public Language.Reflection.TT

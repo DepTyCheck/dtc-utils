@@ -19,26 +19,29 @@ authors = "Anton Gusev"
 modules = Language.Reflection.VarSubst
         , Language.Reflection.QuoteInfo
         , Language.Reflection.ShadowingInfo
-        , Language.Reflection.Unification       
-	, Language.Reflection.Unification.Runner
-        , Language.Reflection.Unification.Context       
-        , Language.Reflection.Unification.Engine      
-        , Language.Reflection.Unification.Error       
-        , Language.Reflection.Unification.Graph      
-        , Language.Reflection.Unification.Monad  
-        , Language.Reflection.Unification.State
+        , Language.Reflection.Unifier
+        , Language.Reflection.Unifier.Interface
+        , Language.Reflection.Unifier.TypecheckUnifier
+        , Language.Reflection.Unifier.LegacyUnifier       
+	, Language.Reflection.Unifier.LegacyUnifier.Runner
+        , Language.Reflection.Unifier.LegacyUnifier.Context       
+        , Language.Reflection.Unifier.LegacyUnifier.Engine      
+        , Language.Reflection.Unifier.LegacyUnifier.Error       
+        , Language.Reflection.Unifier.LegacyUnifier.Graph      
+        , Language.Reflection.Unifier.LegacyUnifier.Monad  
+        , Language.Reflection.Unifier.LegacyUnifier.State
+        , Language.Reflection.Unifier.ManualUnifier
+        , Language.Reflection.Unifier.ManualUnifier.Context
+        , Language.Reflection.Unifier.ManualUnifier.Context.Main
+        , Language.Reflection.Unifier.ManualUnifier.Context.GlobalVars
+        , Language.Reflection.Unifier.ManualUnifier.Convert
+        , Language.Reflection.Unifier.ManualUnifier.Solver
+        , Language.Reflection.Unifier.ManualUnifier.Solver.Constraints
+        , Language.Reflection.Unifier.ManualUnifier.IR
+        , Language.Reflection.Unifier.ManualUnifier.IR.AppChain
+        , Language.Reflection.Unifier.ManualUnifier.Error
+        , Language.Reflection.Unifier.ManualUnifier.Log
         , Language.Reflection.Monomorphisation
-        , Language.Reflection.Unification3
-        , Language.Reflection.Unification3.Context
-        , Language.Reflection.Unification3.Context.Main
-        , Language.Reflection.Unification3.Context.GlobalVars
-        , Language.Reflection.Unification3.Convert
-        , Language.Reflection.Unification3.Solver
-        , Language.Reflection.Unification3.Solver.Constraints
-        , Language.Reflection.Unification3.IR
-        , Language.Reflection.Unification3.IR.AppChain
-        , Language.Reflection.Unification3.Error
-        , Language.Reflection.Unification3.Log
         , Language.Reflection.Monomorphisation2
         -- , Language.Reflection.Logging
         , Data.FinBitSet

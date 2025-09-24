@@ -1,14 +1,14 @@
-module Language.Reflection.Unification3.Context.GlobalVars
+module Language.Reflection.Unifier.ManualUnifier.Context.GlobalVars
 
 import public Control.Monad.Either
 import public Control.Monad.State
 
 import public Language.Reflection
 import public Language.Reflection.TT
-import public Language.Reflection.Unification3.IR
-import public Language.Reflection.Unification3.Error
-import public Language.Reflection.Unification3.Context.Main
-import public Language.Reflection.Unification3.Convert
+import public Language.Reflection.Unifier.ManualUnifier.IR
+import public Language.Reflection.Unifier.ManualUnifier.Error
+import public Language.Reflection.Unifier.ManualUnifier.Context.Main
+import public Language.Reflection.Unifier.ManualUnifier.Convert
 
 import public Data.SortedMap
 import public Data.SortedMap.Dependent

@@ -1,4 +1,4 @@
-module Language.Reflection.Unification.Context
+module Language.Reflection.Unifier.LegacyUnifier.Context
 
 import public Language.Reflection
 import public Language.Reflection.VarSubst -- TODO: refactor that too

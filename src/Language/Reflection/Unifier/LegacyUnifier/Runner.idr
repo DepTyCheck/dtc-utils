@@ -1,6 +1,6 @@
-module Language.Reflection.Unification.Runner
+module Language.Reflection.Unifier.LegacyUnifier.Runner
 
-import public Language.Reflection.Unification.Graph
+import public Language.Reflection.Unifier.LegacyUnifier.Graph
 
 public export
 doUnification' : (task : UnificationTask) -> Unification UnificationResult

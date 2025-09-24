@@ -1,5 +1,5 @@
 ||| Unifier logging infrastructure
-module Language.Reflection.Unification3.Log
+module Language.Reflection.Unifier.ManualUnifier.Log
 
 import public Language.Reflection
 import public Control.Monad.Writer

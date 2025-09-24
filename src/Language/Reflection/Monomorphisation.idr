@@ -20,7 +20,7 @@ import public Data.SortedSet
 import public Data.SortedMap.Dependent
 import public Text.PrettyPrint.Bernardy.Interface
 import public Text.PrettyPrint.Bernardy.Core
-import public Language.Reflection.Unification
+import public Language.Reflection.Unifier.LegacyUnifier
 
 %language ElabReflection
 

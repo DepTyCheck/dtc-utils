@@ -1,7 +1,7 @@
 module Unification
 
-import public Language.Reflection.Unification3
-import public Language.Reflection.Unification3.Convert
+import public Language.Reflection.Unifier.ManualUnifier
+import public Language.Reflection.Unifier.ManualUnifier.Convert
 
 import public Data.Either
 import public Control.Monad.State

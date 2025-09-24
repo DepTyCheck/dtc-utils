@@ -1,8 +1,8 @@
-module Language.Reflection.Unification.Error
+module Language.Reflection.Unifier.LegacyUnifier.Error
 
 import public Control.Monad.Either
 import public Control.Monad.Reader
-import public Language.Reflection.Unification.Context
+import public Language.Reflection.Unifier.LegacyUnifier.Context
 
 parameters {auto task: UnificationTask}
   public export

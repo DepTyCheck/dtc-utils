@@ -1,4 +1,4 @@
-module Language.Reflection.Unification3.Context.Main
+module Language.Reflection.Unifier.ManualUnifier.Context.Main
 
 import public Control.Monad.Error.Either
 import public Control.Monad.Error.Interface
@@ -6,8 +6,8 @@ import public Control.Monad.State
 
 import public Language.Reflection
 import public Language.Reflection.TT
-import public Language.Reflection.Unification3.IR
-import public Language.Reflection.Unification3.Error
+import public Language.Reflection.Unifier.ManualUnifier.IR
+import public Language.Reflection.Unifier.ManualUnifier.Error
 
 import public Data.Fin
 import public Data.SortedMap

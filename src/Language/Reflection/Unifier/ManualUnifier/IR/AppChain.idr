@@ -1,7 +1,7 @@
 ||| Function application chains and operations on them
-module Language.Reflection.Unification3.IR.AppChain
+module Language.Reflection.Unifier.ManualUnifier.IR.AppChain
 
-import public Language.Reflection.Unification3.IR
+import public Language.Reflection.Unifier.ManualUnifier.IR
 
 import public Data.SortedMap
 

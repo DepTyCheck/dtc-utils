@@ -1,7 +1,7 @@
 ||| Error management during unification
-module Language.Reflection.Unification3.Error
+module Language.Reflection.Unifier.ManualUnifier.Error
 
-import public Language.Reflection.Unification3.IR
+import public Language.Reflection.Unifier.ManualUnifier.IR
 
 import public Control.Monad.Error.Interface
 

@@ -1,6 +1,6 @@
 ||| Definitions for the IR used during unification 
 ||| and operations on it that don't require a context.
-module Language.Reflection.Unification3.IR
+module Language.Reflection.Unifier.ManualUnifier.IR
 
 import public Language.Reflection
 import public Language.Reflection.TT

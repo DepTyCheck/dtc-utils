@@ -9,9 +9,9 @@
 ||| 4. Check whether the graph has any cycles, error if so
 ||| 5. Solve the dependency graph
 ||| 6. Determine which free variables in the equality cluster to keep
-module Language.Reflection.Unification3
+module Language.Reflection.Unifier.ManualUnifier
 
-import public Language.Reflection.Unification3.Solver
+import public Language.Reflection.Unifier.ManualUnifier.Solver
 
 record DepGraph (cs : Constraints bds) where
   constructor MkDG

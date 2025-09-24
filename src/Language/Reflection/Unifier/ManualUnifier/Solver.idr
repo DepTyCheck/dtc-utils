@@ -1,12 +1,12 @@
-module Language.Reflection.Unification3.Solver
+module Language.Reflection.Unifier.ManualUnifier.Solver
 
-import public Language.Reflection.Unification3.Solver.Constraints
+import public Language.Reflection.Unifier.ManualUnifier.Solver.Constraints
 
-import public Language.Reflection.Unification3.Context
-import public Language.Reflection.Unification3.Error
-import public Language.Reflection.Unification3.IR
-import public Language.Reflection.Unification3.IR.AppChain
-import public Language.Reflection.Unification3.Log
+import public Language.Reflection.Unifier.ManualUnifier.Context
+import public Language.Reflection.Unifier.ManualUnifier.Error
+import public Language.Reflection.Unifier.ManualUnifier.IR
+import public Language.Reflection.Unifier.ManualUnifier.IR.AppChain
+import public Language.Reflection.Unifier.ManualUnifier.Log
 
 import public Control.Monad.Error.Either
 import public Control.Monad.Error.Interface

@@ -1,7 +1,7 @@
-module Language.Reflection.Unification.State
+module Language.Reflection.Unifier.LegacyUnifier.State
 
-import public Language.Reflection.Unification.Context
-import public Language.Reflection.Unification.Error
+import public Language.Reflection.Unifier.LegacyUnifier.Context
+import public Language.Reflection.Unifier.LegacyUnifier.Error
 import public Syntax.IHateParens
 import public Control.Monad.State
 
