@@ -17,6 +17,8 @@ record UnificationTask where
   rhsFreeVars : Vect rfv (Name, TTImp)
   rhs : TTImp
 
+%name UnificationTask task
+
 public export
 Show UnificationTask where
   show (MkUniTask l lfv lhs r rfv rhs) = 
@@ -29,6 +31,8 @@ record FVData where
   holeName : String
   type : TTImp
   value : Maybe TTImp
+
+%name FVData fv, fvData
 
 public export
 Eq FVData where
@@ -55,6 +59,8 @@ record DependencyGraph where
   nameToId : SortedMap Name $ Fin freeVars
   --- For all i : (Fin freeVars); (lookup (index i fvData).holeName holeToId) = i
   holeToId : SortedMap String $ Fin freeVars
+
+%name DependencyGraph dg, depGraph
 
 public export
 Eq DependencyGraph where

@@ -203,7 +203,7 @@ extractFVData t v ((n, t') :: xs) (hn :: hns) = do
       let (vv ** vRest) = v
       quoteV <- quote vv
       quoteT <- quote myTy
-      logMsg "" 0 "\{show n} : \{show quoteT} = \{show quoteV}"
+      logMsg "Unifier.TypecheckUnifier" 0 "\{show n} : \{show quoteT} = \{show quoteV}"
       rest <- extractFVData (dNext vv) vRest xs hns
       let retVal = case quoteV of IHole _ hh => if hh == hn then Nothing else Just quoteV; qv => Just qv
       pure $ (n, quoteT, retVal) :: rest
@@ -212,6 +212,7 @@ extractFVData t v ((n, t') :: xs) (hn :: hns) = do
       throwError "Failed to extract dependent pair from \{show qT}" 
 extractFVData _ _ [] [] = pure []
 
+-- TODO: Crashes if given a task with named holes
 unify : 
   Elaboration m => 
   MonadError String m => 
@@ -232,28 +233,35 @@ unify task = do
   let checkTarget = 
     buildUpTarget (zip lhsNames snocLFV) $ 
       buildUpTarget (zip rhsNames snocRFV) `(Refl)
-  logMsg "" 0 "\{show checkTargetType}"
-  logMsg "" 0 "\{show checkTarget}"
+  logMsg "Unifier.TypecheckUnifier" 0 "\{show checkTargetType}"
+  logMsg "Unifier.TypecheckUnifier" 0 "\{show checkTarget}"
   -- Instantiate target type
-  checkTargetType' : Type <- check checkTargetType
+  (Just checkTargetType') : Maybe Type <-
+    try (Just <$> check checkTargetType) (pure Nothing)
+  | _ => throwError "Failed to build target type (\{show checkTargetType})"
   -- Run unification
-  checkTarget' : checkTargetType' <- check checkTarget
+  (Just checkTarget') : Maybe checkTargetType' <- 
+    try (Just <$> check checkTarget) (pure Nothing)
+  | _ => throwError "Unification failed"
   ctQuote <- quote checkTarget'
-  logMsg "" 0 "\{show ctQuote}"
+  logMsg "Unifier.TypecheckUnifier" 0 "\{show ctQuote}"
   let vectNames = toVect allNames
   -- Extract unification results
   uniResults <- 
     extractFVData checkTargetType' checkTarget' allFreeVars vectNames
   -- Generate dependency graph
   let dg = genDG $ makeFVData <$> zip vectNames uniResults
-  logMsg "" 0 "\{show dg}"
+  logMsg "Unifier.TypecheckUnifier" 0 "\{show dg}"
   let dg = subEmpties dg
-  logMsg "" 0 "Subst empties: \{show dg}"
+  logMsg "Unifier.TypecheckUnifier" 0 "Subst empties: \{show dg}"
   let solved = solveDG dg
-  logMsg "" 0 "Solved DG : \{show solved}"
+  logMsg "Unifier.TypecheckUnifier" 0 "Solved DG : \{show solved}"
   pure solved
 
 public export
 typeCheckUnifier : Unifier
-typeCheckUnifier task = runEitherT {m=Elab} $ unify task
+typeCheckUnifier task = 
+  try 
+    (runEitherT {m=Elab} $ unify task) 
+    (pure $ Left $ "Unification failed catastrophically (likely because of the named hole bug)")
 
