@@ -212,7 +212,11 @@ extractFVData t v ((n, t') :: xs) (hn :: hns) = do
       throwError "Failed to extract dependent pair from \{show qT}" 
 extractFVData _ _ [] [] = pure []
 
-unify : Elaboration m => MonadError String m => UnificationTask -> m $ DependencyGraph
+unify : 
+  Elaboration m => 
+  MonadError String m => 
+  UnificationTask -> 
+  m $ DependencyGraph
 unify task = do
   let allFreeVars = task.lhsFreeVars ++ task.rhsFreeVars
   let snocLFV = fromVect task.lhsFreeVars
@@ -238,7 +242,8 @@ unify task = do
   logMsg "" 0 "\{show ctQuote}"
   let vectNames = toVect allNames
   -- Extract unification results
-  uniResults <- extractFVData checkTargetType' checkTarget' allFreeVars vectNames
+  uniResults <- 
+    extractFVData checkTargetType' checkTarget' allFreeVars vectNames
   -- Generate dependency graph
   let dg = genDG $ makeFVData <$> zip vectNames uniResults
   logMsg "" 0 "\{show dg}"
