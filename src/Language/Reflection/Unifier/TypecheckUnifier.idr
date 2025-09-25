@@ -62,8 +62,8 @@ genEmpties fvs = foldl genEmpties' empty $ zip (allFins freeVars) fvs
     genEmpties' : FinBitSet fv -> (Fin fv, FVData) -> FinBitSet fv
     genEmpties' set (i, fv) = 
       if isNothing fv.value 
-         then set 
-         else insert i set
+         then insert i set 
+         else set
 
 genDG : 
   {freeVars : Nat} -> 
