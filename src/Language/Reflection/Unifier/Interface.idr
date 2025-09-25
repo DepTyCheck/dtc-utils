@@ -1,11 +1,13 @@
 module Language.Reflection.Unifier.Interface
 
 import public Control.Monad.Either
-import public Data.Vect
-import public Data.SortedMap
+import public Data.Either
 import public Data.FinBitSet
+import public Data.SortedMap
+import public Data.Vect
 import public Decidable.Equality
 import public Language.Reflection
+import public Language.Reflection.Syntax
 
 public export
 record UnificationTask where
@@ -41,7 +43,7 @@ Eq FVData where
 
 public export
 Show FVData where
-  show (MkFVData n h t v) = "MkFVData \{show n} \{h} \{show t} \{show v}"
+  show (MkFVData n h t v) = "MkFVData \{show n} \{h} (\{show t}) (\{show v})"
 
 public export
 makeFVData : (String, Name, TTImp, Maybe TTImp) -> FVData
@@ -74,6 +76,36 @@ public export
 Show DependencyGraph where
   show (MkDG a b c d e f) = 
     "MkDG \{show a} \{show b} \{show c} \{show d} \{show e} \{show f}"
+
+prettyDeps : (dg : DependencyGraph) -> FinBitSet dg.freeVars -> String
+prettyDeps dg deps = 
+  if deps == empty then
+    ""
+  else
+    " Depends on: \{show $ (name . flip index dg.fvData) <$> toList deps}\n"
+
+prettyFV : (dg : DependencyGraph) -> FVData -> String
+prettyFV dg fvd = 
+  "\{show fvd.name} : \{show fvd.type}" ++ 
+    (case fvd.value of
+      Nothing => "\n"
+      Just val => " = \{show val}\n") ++
+    " n2Id : \{show $ lookup fvd.name dg.nameToId}; " ++
+    " h2Id : \{show $ lookup fvd.holeName dg.holeToId}\n"
+
+
+public export
+prettyDG : DependencyGraph -> String
+prettyDG dg = 
+  "\{show dg.freeVars} free variables:\n" ++ 
+    (joinBy "" $ 
+      (\(a,b) => prettyFV dg a ++ prettyDeps dg b) <$> 
+        (toList $ zip dg.fvData dg.fvDeps)) ++
+    "===\nEmpties: \{show $ (name . flip index dg.fvData) <$> toList dg.empties}\n======"
+
+public export
+printDG : (Either String DependencyGraph) -> IO ()
+printDG = putStrLn . fromMaybe "" . eitherToMaybe . map prettyDG
 
 public export
 Unifier : Type

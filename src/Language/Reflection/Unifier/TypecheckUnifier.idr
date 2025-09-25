@@ -251,11 +251,11 @@ unify task = do
     extractFVData checkTargetType' checkTarget' allFreeVars vectNames
   -- Generate dependency graph
   let dg = genDG $ makeFVData <$> zip vectNames uniResults
-  logMsg "Unifier.TypecheckUnifier" 0 "\{show dg}"
+  logMsg "Unifier.TypecheckUnifier" 0 "Initial DG:\n\{prettyDG dg}"
   let dg = subEmpties dg
-  logMsg "Unifier.TypecheckUnifier" 0 "Subst empties: \{show dg}"
+  logMsg "Unifier.TypecheckUnifier" 0 "Subst empties:\n\{prettyDG dg}"
   let solved = solveDG dg
-  logMsg "Unifier.TypecheckUnifier" 0 "Solved DG : \{show solved}"
+  logMsg "Unifier.TypecheckUnifier" 0 "Solved DG :\n\{prettyDG solved}"
   pure solved
 
 public export
