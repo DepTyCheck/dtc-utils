@@ -42,6 +42,10 @@ public export
 merge : FinBitSet v -> FinBitSet v -> FinBitSet v
 merge (MkFBS a) (MkFBS b) = MkFBS $ a .|. b
 
+public export
+intersection : FinBitSet v -> FinBitSet v -> FinBitSet v
+intersection (MkFBS a) (MkFBS b) = MkFBS $ a .&. b
+
 mask' : Integer -> Nat -> Integer
 mask' i Z = 0
 mask' i x@(S y) = setBit (mask' i y) x

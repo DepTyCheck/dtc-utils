@@ -103,9 +103,33 @@ prettyDG dg =
         (toList $ zip dg.fvData dg.fvDeps)) ++
     "===\nEmpties: \{show $ (name . flip index dg.fvData) <$> toList dg.empties}\n======"
 
+leaves : (dg : DependencyGraph) -> FinBitSet dg.freeVars
+leaves dg = 
+  foldl 
+    (\acc,(id, deps) => if deps == empty then insert id acc else acc) 
+    empty $ 
+  zip (allFins dg.freeVars) dg.fvDeps
+
+-- List all the free variables without a value that don't depend on any other free variables
+emptyLeaves : (dg : DependencyGraph) -> FinBitSet dg.freeVars
+emptyLeaves dg = intersection dg.empties $ leaves dg
+
+updateCtx : List (Fin v) -> SnocList (Fin v) -> SnocList (Fin v)
+updateCtx [] acc = acc
+updateCtx (x :: xs) acc = updateCtx xs $ acc :< x
+
+-- List all the free variables without a value in order of dependency
+flattenEmpties' : (dg : DependencyGraph) -> SnocList (Fin dg.freeVars) -> SnocList $ Fin dg.freeVars
+flattenEmpties' dg ctx = do
+  let els = emptyLeaves dg
+  let False = els == empty
+  | _ => ctx
+  let newCtx = updateCtx (toList els) ctx
+  flattenEmpties' (MkDG dg.freeVars dg.fvData (removeAll els <$> dg.fvDeps) (removeAll els dg.empties) dg.nameToId dg.holeToId) newCtx
+
 public export
-printDG : (Either String DependencyGraph) -> IO ()
-printDG = putStrLn . fromMaybe "" . eitherToMaybe . map prettyDG
+flattenEmpties : (dg : DependencyGraph) -> SnocList $ Fin dg.freeVars
+flattenEmpties dg = flattenEmpties' dg [<]
 
 public export
 Unifier : Type
