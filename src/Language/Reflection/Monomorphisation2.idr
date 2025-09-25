@@ -1,7 +1,9 @@
 module Language.Reflection.Monomorphisation2
 
 import public Data.SnocList
+import public Derive.Prelude
 import public Language.Reflection
+import public Language.Reflection.VarSubst
 import public Language.Reflection.Syntax
 import public Language.Reflection.Types
 import public Language.Reflection.Pretty
@@ -20,7 +22,7 @@ import public Data.SortedSet
 import public Data.SortedMap.Dependent
 import public Text.PrettyPrint.Bernardy.Interface
 import public Text.PrettyPrint.Bernardy.Core
-import public Language.Reflection.Unifier.LegacyUnifier
+import public Language.Reflection.Unifier
 import public Control.Monad.Reader.Tuple
 
 %language ElabReflection
@@ -81,9 +83,25 @@ record Task where
   fullInvocation : TTImp
   type : Monomorphisation2.TypeInfo
 
+record UnificationResult where
+  constructor MkUR
+  fvL : Nat
+  fvLs : Vect fvL (Name, TTImp)
+  lhs : TTImp
+  fvR : Nat
+  fvRs : Vect fvR (Name, TTImp)
+  rhs : TTImp
+  dg : DependencyGraph
+  lhsResult : SortedMap Name TTImp
+  rhsResult : SortedMap Name TTImp
+  fullResult : SortedMap Name TTImp
+  order : List $ Fin dg.freeVars
+
+%runElab derive "UnificationResult" [Show]
+
 record TaskState where
   constructor MkTaskState
-  unis : List $ Either UnificationError UnificationResult
+  unis : List $ Either String UnificationResult
 
 convertCon : Elaboration m => Con na va -> m ConInfo
 convertCon con = do
@@ -130,7 +148,7 @@ mapCons_ : Monad m =>
 mapCons_ f task = mapCons f task *> pure ()
 
 mapUConsM : Monad m =>
-            (f : Task -> ConInfo -> Either UnificationError UnificationResult -> m t) ->
+            (f : Task -> ConInfo -> Either String UnificationResult -> m t) ->
             Task ->
             TaskState ->
             m $ List t
@@ -138,7 +156,7 @@ mapUConsM f task state =
   traverse (\(x, y) => f task x y) $ zip task.type.cons state.unis
 
 mapUConsM_ : Monad m =>
-            (f : Task -> ConInfo -> Either UnificationError UnificationResult -> m t) ->
+            (f : Task -> ConInfo -> Either String UnificationResult -> m t) ->
             Task ->
             TaskState ->
             m ()
@@ -151,7 +169,7 @@ mapUCons : Monad m =>
            m $ List t
 mapUCons f task state = traverseA (\(x, y) => f task x y) $ zip task.type.cons state.unis
   where
-    traverseA : ((ConInfo, UnificationResult) -> m t) -> List (ConInfo, Either UnificationError UnificationResult) -> m $ List t
+    traverseA : ((ConInfo, UnificationResult) -> m t) -> List (ConInfo, Either String UnificationResult) -> m $ List t
     traverseA _ [] = pure []
     traverseA f ((ci, Left _) :: xs) = traverseA f xs
     traverseA f ((ci, Right ui) :: xs) = pure $ !(f (ci, ui)) :: !(traverseA f xs)
@@ -167,15 +185,20 @@ arg2tup : Arg -> (Name, TTImp)
 arg2tup (MkArg count piInfo Nothing type) = (?nameImpossible, type)
 arg2tup (MkArg count piInfo (Just x) type) = (x, type)
 
-unifyCon : Elaboration m =>
-           Task -> ConInfo ->
-           m $ Either UnificationError UnificationResult
+unifyCon : Task -> ConInfo ->
+           Elab $ Either String UnificationResult
 unifyCon task ci = do
   let (targs, tret) = unLambda task.taskQuote
   let (cargs, cret) = unPi ci.sig
   let inv = task.fullInvocation
-  doUnification (map arg2tup targs)
-                inv (map arg2tup cargs) cret
+  let fvLs = arg2tup <$> fromList cargs
+  let fvRs = arg2tup <$> fromList targs
+  Right uniResult <- typeCheckUnifier $ MkUniTask _ fvLs cret _ fvRs inv
+  | Left err => pure $ Left err
+  let fvOrder = flattenEmpties uniResult
+  let urList : List _ = foldl (\xs, x => case x.value of Just val => (x.name, val) :: xs; Nothing => xs) (the (List (Name, TTImp)) []) uniResult.fvData
+  let (lhsRL, rhsRL) = List.splitAt (length cargs) urList
+  pure $ Right $ MkUR _ fvLs cret  _ fvRs tret uniResult (fromList lhsRL) (fromList rhsRL) (fromList urList) $ toList fvOrder
 
 args2App : List Arg -> TTImp -> TTImp
 args2App [] x = x
@@ -203,6 +226,14 @@ substituteInArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting with (lo
   substituteInArgs ((MkArg count piInfo (Just x) type) :: xs) rhsS acting | Just tv
     = substituteInArgs xs rhsS (insert x tv acting)
 
+buildArg' : (ur: UnificationResult) -> Fin (ur.dg.freeVars) -> Arg
+buildArg' ur id = MkArg MW (if finToNat id >= ur.fvL then ImplicitArg else ExplicitArg )  (Just dt.name) dt.type
+  where
+    dt = index id ur.dg.fvData
+
+buildArgs : UnificationResult -> List Arg
+buildArgs ur = map (buildArg' ur) ur.order
+
 mkMonoConInfo : Monad m =>
                 Task -> ConInfo ->
                 UnificationResult ->
@@ -210,9 +241,8 @@ mkMonoConInfo : Monad m =>
 mkMonoConInfo task ci cu = do
   let (targs, _) = unPi task.taskType
   let (cargs, _) = unPi ci.sig
-  let retTy = substituteVariables cu.lhsVars task.outputInvocation
-  let amended = substituteInArgs cargs cu.rhsVarsEO empty
-  pure $ MkConInfo (dropNS ci.name) $ piAll retTy amended
+  let retTy = substituteVariables cu.fullResult task.outputInvocation
+  pure $ MkConInfo (dropNS ci.name) $ piAll retTy $ buildArgs cu
 
 mkMonoTy : Monad m =>
            Task -> TaskState ->
@@ -271,6 +301,7 @@ monomorphise : TypeTask l => l -> Name -> Elab ()
 monomorphise l outputName = do
   task <- getTask l outputName
   uni_res <- mapCons unifyCon task
+  logMsg "monomorphise" 0 "Unification result: \{show uni_res}"
   let state = MkTaskState uni_res
   logMsg "monomorphiser" 0 "Unifieds: \{show state.unis}"
   ty <- mkMonoTy task state
@@ -278,6 +309,7 @@ monomorphise l outputName = do
   let tydecl = ty.decl
   logMsg "monomorphiser" 0 "Generated decl: \{show tydecl}"
   let nsname : String = show task.outputName
+  declare [ INamespace EmptyFC (MkNS [show outputName]) [tydecl]]
   toPoly <- mToPDecls task state
   logMsg "monomorphiser" 0 "ToPoly: \{show toPoly}"
 
