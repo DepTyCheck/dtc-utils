@@ -8,3 +8,9 @@ test = "test/test.ipkg"
 type = "local"
 path = "test"
 ipkg = "test.ipkg"
+
+[custom.nightly-250916.mk]
+type = "github"
+url = "https://github.com/buzden/idris2-mk"
+commit = "0df0651b12ecc574d5083a361333f80aaaa912ad"
+ipkg = "mk.ipkg"

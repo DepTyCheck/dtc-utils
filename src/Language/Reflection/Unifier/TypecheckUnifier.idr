@@ -170,23 +170,25 @@ solveDG dg = do
 
 genHoleNames : 
   Elaboration m => 
-  SnocVect l (Name, _) -> 
+  SnocVect l TaskFVData -> 
   m $ (SortedMap Name String, SnocVect l String)
 genHoleNames [<] = pure (empty, [<])
-genHoleNames (xs :< (n, _)) = do
-  gs <- genSym $ show n
+genHoleNames (xs :< fv) = do
+  gs <- genSym $ show fv.name
   (others, others') <- genHoleNames xs
-  pure $ (insert n (show gs) others, others' :< show gs)
+  pure $ (insert fv.name (show gs) others, others' :< show gs)
 
-buildUpDPair : SnocVect l (Name, TTImp) -> TTImp -> TTImp
+buildUpDPair : SnocVect l TaskFVData -> TTImp -> TTImp
 buildUpDPair [<] t = t
-buildUpDPair (xs :< (n, ty)) t = 
+buildUpDPair (xs :< fv) t = 
   buildUpDPair xs 
-    `(Builtin.DPair.DPair ~ty ~(ILam EmptyFC MW ExplicitArg (Just n) ty t))
+    `(Builtin.DPair.DPair 
+      ~(fv.type) 
+      ~(ILam EmptyFC MW ExplicitArg (Just fv.name) fv.type t))
 
-buildUpTarget : SnocVect l (String, Name, TTImp) -> TTImp -> TTImp
+buildUpTarget : SnocVect l (String, TaskFVData) -> TTImp -> TTImp
 buildUpTarget [<] t = t
-buildUpTarget (xs :< (s, n, _)) t = 
+buildUpTarget (xs :< (s, _)) t = 
   buildUpTarget xs `((~(IHole EmptyFC s) ** ~t))
 
 extractFVData : 
@@ -194,19 +196,24 @@ extractFVData :
   MonadError String m =>
   (t : Type) -> 
   t -> 
-  Vect l (Name, TTImp) -> 
+  Vect l TaskFVData -> 
   Vect l String -> 
   m $ Vect l (Name, TTImp, Maybe TTImp)
-extractFVData t v ((n, t') :: xs) (hn :: hns) = do
+extractFVData t v (fv :: xs) (hn :: hns) = do
   case t of
     (DPair myTy dNext) => do
       let (vv ** vRest) = v
       quoteV <- quote vv
       quoteT <- quote myTy
-      logMsg "Unifier.TypecheckUnifier" 0 "\{show n} : \{show quoteT} = \{show quoteV}"
+      logMsg "Unifier.TypecheckUnifier" 0 
+        "\{show fv.name} : \{show quoteT} = \{show quoteV}"
       rest <- extractFVData (dNext vv) vRest xs hns
-      let retVal = case quoteV of IHole _ hh => if hh == hn then Nothing else Just quoteV; qv => Just qv
-      pure $ (n, quoteT, retVal) :: rest
+      let retVal = 
+        case quoteV of 
+            IHole _ hh => 
+              if hh == hn then Nothing else Just quoteV
+            qv => Just qv
+      pure $ (fv.name, quoteT, retVal) :: rest
     _ => do
       qT <- quote t
       throwError "Failed to extract dependent pair from \{show qT}" 
@@ -250,7 +257,8 @@ unify task = do
   uniResults <- 
     extractFVData checkTargetType' checkTarget' allFreeVars vectNames
   -- Generate dependency graph
-  let dg = genDG $ makeFVData <$> zip vectNames uniResults
+  let allZipped = zip vectNames $ zip allFreeVars uniResults
+  let dg = genDG $ makeFVData <$> allZipped
   logMsg "Unifier.TypecheckUnifier" 0 "Initial DG:\n\{prettyDG dg}"
   let dg = subEmpties dg
   logMsg "Unifier.TypecheckUnifier" 0 "Subst empties:\n\{prettyDG dg}"

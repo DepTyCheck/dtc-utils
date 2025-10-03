@@ -7,16 +7,44 @@ import public Data.SortedMap
 import public Data.Vect
 import public Decidable.Equality
 import public Language.Reflection
+import public Language.Reflection.TTImp
+import public Language.Reflection.TT
 import public Language.Reflection.Syntax
+
+public export
+record TaskFVData where
+  constructor MkTFVD
+  name : Name
+  rig : Count
+  piInfo : PiInfo TTImp
+  type : TTImp
+
+Show a => Show (PiInfo a) where
+  show ImplicitArg = "ImplicitArg"
+  show ExplicitArg = "ExplicitArg"
+  show AutoImplicit = "AutoImplicit"
+  show (DefImplicit x) = "DefImplicit \{show x}"
+
+public export
+tryFromArg : MonadError e m => Lazy e -> Arg -> m TaskFVData
+tryFromArg errMsg (MkArg count piInfo Nothing type) = 
+  throwError errMsg
+tryFromArg errMsg (MkArg count piInfo (Just x) type) = 
+  pure $ MkTFVD x count piInfo type
+
+public export
+Show TaskFVData where
+  show (MkTFVD name rig piInfo type) = 
+    showPiInfo piInfo $ showCount rig "\{name} : \{show type}"
 
 public export
 record UnificationTask where
   constructor MkUniTask
   lfv : Nat
-  lhsFreeVars : Vect lfv (Name, TTImp)
+  lhsFreeVars : Vect lfv TaskFVData
   lhs : TTImp
   rfv : Nat
-  rhsFreeVars : Vect rfv (Name, TTImp)
+  rhsFreeVars : Vect rfv TaskFVData
   rhs : TTImp
 
 %name UnificationTask task
@@ -31,6 +59,8 @@ record FVData where
   constructor MkFVData
   name : Name
   holeName : String
+  rig : Count
+  piInfo : PiInfo TTImp
   type : TTImp
   value : Maybe TTImp
 
@@ -38,16 +68,16 @@ record FVData where
 
 public export
 Eq FVData where
-  (==) (MkFVData n h t v) (MkFVData n' h' t' v') = 
-    n == n' && h == h' && t == t' && v == v'
+  (==) (MkFVData n h r p t v) (MkFVData n' h' r' p' t' v') = 
+    n == n' && h == h' && t == t' && v == v' && r == r' && p == p'
 
 public export
 Show FVData where
-  show (MkFVData n h t v) = "MkFVData \{show n} \{h} (\{show t}) (\{show v})"
+  show (MkFVData n h r p t v) = joinBy "" [ showPiInfo p $ showCount r "\{n} \{h} : \{show t}", " = \{show v}" ]
 
 public export
-makeFVData : (String, Name, TTImp, Maybe TTImp) -> FVData
-makeFVData (h, n, t, v) = MkFVData n h t v
+makeFVData : (String, TaskFVData, Name, TTImp, Maybe TTImp) -> FVData
+makeFVData (h, fv, n, t, v) = MkFVData n h fv.rig fv.piInfo t v
 
 public export
 record DependencyGraph where
@@ -96,12 +126,17 @@ prettyFV dg fvd =
 
 public export
 prettyDG : DependencyGraph -> String
-prettyDG dg = 
-  "\{show dg.freeVars} free variables:\n" ++ 
-    (joinBy "" $ 
+prettyDG dg = joinBy ""
+  [ show dg.freeVars
+  , " free variables:\n"
+  , (joinBy "" $ 
       (\(a,b) => prettyFV dg a ++ prettyDeps dg b) <$> 
-        (toList $ zip dg.fvData dg.fvDeps)) ++
-    "===\nEmpties: \{show $ (name . flip index dg.fvData) <$> toList dg.empties}\n======"
+        (toList $ zip dg.fvData dg.fvDeps))   
+  , "===\n"
+  , "Empties: "
+  , show $ (name . flip index dg.fvData) <$> toList dg.empties
+  , "\n======"
+  ]
 
 leaves : (dg : DependencyGraph) -> FinBitSet dg.freeVars
 leaves dg = 

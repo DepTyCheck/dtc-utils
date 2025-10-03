@@ -14,37 +14,35 @@ import Language.Reflection.Syntax
 
 import Data.FinBitSet
 
+%language ElabReflection
+
 namespace ExpVect
   data VectNat : Nat -> Type where
     Nil : VectNat 0
-    (::) : Nat -> VectNat x -> VectNat (S x)
+    (::) : Nat -> Vect x Nat -> VectNat (S x)
 
   public export
   castImpl : VectNat a -> Vect a Nat
   castImpl [] = []
-  castImpl (x :: xs) = x :: castImpl xs
+  castImpl (x :: xs) = x :: xs
 
-  mInj1 : {a : Nat} -> {a' : Nat} -> {b : VectNat l} -> {b' : VectNat l} -> (ExpVect.(::) a b) = (ExpVect.(::) a' b') -> (a = a', b = b')
-  mInj1 {a} {a' = a} {b} {b' = b} Refl = (Refl, Refl)
+  mCong1 : {a, a', l, l' : Nat} -> {b : Vect l Nat} -> {b' : Vect l' Nat} -> (a = a', b = b', l = l') -> (ExpVect.(::) a b) = (ExpVect.(::) a' b')
+  mCong1 {a} {a' = a} {l} {l' = l} {b} {b' = b} (Refl, Refl, Refl) = Refl
 
-  mCong1 : {a : Nat} -> {a' : Nat} -> {b : VectNat l} -> {b' : VectNat l} -> (a = a', b = b') -> (ExpVect.(::) a b) = (ExpVect.(::) a' b')
-  mCong1 {a} {a' = a} {b} {b' = b} (Refl, Refl) = Refl
-
-  pInj1 : {a : Nat} -> {a' : Nat} -> {b : Vect l Nat} -> {b' : Vect l Nat} -> (Vect.(::) a b) = (Vect.(::) a' b') -> (a = a', b = b')
-  pInj1 {a} {a' = a} {b} {b' = b} Refl = (Refl, Refl)
+  pInj1 : {a, a' : Nat} -> {l : Nat} -> {l' : Nat} -> {b : Vect l Nat} -> {b' : Vect l' Nat} -> (Vect.(::) a b) = (Vect.(::) a' b') -> (a = a', b = b', l = l')
+  pInj1 {a} {a' = a} {l} {l' = l} {b} {b' = b} Refl = (Refl, Refl, Refl)
 
   Cast (VectNat a) (Vect a Nat) where
     cast = castImpl
 
-  injImpl : {x : VectNat a} -> {y : VectNat a} -> (castImpl x = castImpl y) -> (x = y)
+  injImpl : {l : Nat} -> {l' : Nat} -> {x : VectNat l} -> {y : VectNat l'} -> (castImpl x = castImpl y) -> (x = y)
   injImpl {x = []} {y = []} r = Refl
-  injImpl {x = (_ :: _)} {y = (_ :: _)} r = do
-    let (eq0, eq1) = pInj1 r
-    let eq1 = injImpl eq1
-    mCong1 (eq0, eq1)
+  injImpl {x = (_ :: _)} {y = (_ :: _)} {l = (S _)} {l' = (S _)} r = mCong1 $ pInj1 $ r
 
-  Injective ExpVect.castImpl where
-    injective = injImpl
+
+  %hint
+  injImplt : {a : Nat} -> Injective $ ExpVect.castImpl {a}
+  injImplt = MkInjective injImpl
 
   DecEq (Vect a Nat) => DecEq (VectNat a) where
     decEq x1 x2 = decEqInj {f=castImpl} $ decEq (castImpl x1) (castImpl x2)

@@ -41,12 +41,13 @@ modules = Language.Reflection.VarSubst
         , Language.Reflection.Unifier.ManualUnifier.IR.AppChain
         , Language.Reflection.Unifier.ManualUnifier.Error
         , Language.Reflection.Unifier.ManualUnifier.Log
+        , Language.Reflection.Monomorphiser
         , Language.Reflection.Monomorphisation
         , Language.Reflection.Monomorphisation2
         -- , Language.Reflection.Logging
         , Data.FinBitSet
 
-depends = contrib, elab-util, elab-pretty, prettier, elab-util-extra, i-hate-parens, mtl-tuple-impls, lens, fin-lizzie
+depends = contrib, elab-util, elab-pretty, prettier, elab-util-extra, i-hate-parens, mtl-tuple-impls, fin-lizzie, mk
 
 -- main file (i.e. file to load at REPL)
 -- main =

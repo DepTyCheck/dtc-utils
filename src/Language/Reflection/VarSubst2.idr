@@ -167,9 +167,9 @@ substituteBindImpl vMap (IVar fc n) m =
   else m
 substituteBindImpl vMap (IBindVar fc n) m =
   if not !(asks isQuote)
-     && not !(asks $ isShadowed $ fromString n) 
+     && not !(asks $ isShadowed n) 
   then 
-    fromMaybe m $ pure <$> lookup (fromString n) vMap 
+    fromMaybe m $ pure <$> lookup n vMap 
   else m
 substituteBindImpl _ _ m = m  
 
